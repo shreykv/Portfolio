@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Redirecting...</title>
+  <script>
+    // GitHub Pages 404 handler - redirects to index.html for client-side routing
+    const path = window.location.pathname;
+    
+    // If accessing /personal or /personal/*, redirect to personal.html
+    if (path.startsWith('/personal') || path.includes('personal')) {
+      const hash = window.location.hash || '#/personal/gym-log';
+      window.location.replace('/personal.html' + hash);
+    } else {
+      // Otherwise redirect to index.html
+      window.location.replace('/index.html' + window.location.search + window.location.hash);
+    }
+  </script>
+</head>
+<body>
+  <p>Redirecting...</p>
+</body>
+</html>
