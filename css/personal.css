@@ -1,0 +1,520 @@
+/* Personal Access Page Styles */
+/* Extends the design system from index.html */
+
+.personal-container {
+  min-height: 100vh;
+  padding-top: 60px;
+}
+
+.personal-nav {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  backdrop-filter: blur(14px);
+  background: rgba(7, 10, 16, 0.55);
+  border-bottom: 1px solid var(--border);
+}
+
+.personal-nav-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 24px;
+  max-width: var(--max);
+  margin: 0 auto;
+}
+
+.personal-nav-links {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.personal-nav-links a {
+  padding: 8px 12px;
+  border-radius: 12px;
+  color: var(--muted);
+  transition: 0.18s ease;
+  font-size: 14px;
+}
+
+.personal-nav-links a:hover,
+.personal-nav-links a.active {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* Password Modal */
+.password-modal {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(8px);
+  z-index: 10000;
+}
+
+.password-modal-content {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--border);
+  border-radius: var(--radius2);
+  padding: 32px;
+  max-width: 400px;
+  width: 90%;
+  box-shadow: var(--shadow);
+}
+
+.password-modal h2 {
+  margin: 0 0 16px;
+  font-size: 24px;
+}
+
+.password-modal p {
+  color: var(--muted);
+  margin: 0 0 24px;
+  font-size: 14px;
+}
+
+.password-input-group {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.password-input-group input {
+  flex: 1;
+}
+
+.password-error {
+  color: var(--danger);
+  font-size: 13px;
+  margin-top: 8px;
+  display: none;
+}
+
+.password-error.show {
+  display: block;
+}
+
+/* Content Area */
+.personal-content {
+  max-width: var(--max);
+  margin: 0 auto;
+  padding: 24px;
+}
+
+/* Forms */
+.form-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.form-group label {
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+  width: 100%;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(0, 0, 0, 0.22);
+  color: var(--text);
+  outline: none;
+  transition: 0.18s ease;
+  font-family: var(--font);
+  font-size: 14px;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+  border-color: rgba(110, 231, 255, 0.55);
+}
+
+/* Messages */
+.message {
+  padding: 12px 16px;
+  border-radius: 12px;
+  margin-bottom: 16px;
+  font-size: 14px;
+}
+
+.message-success {
+  background: rgba(34, 197, 94, 0.15);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  color: var(--ok);
+}
+
+.message-error {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: var(--danger);
+}
+
+.message-info {
+  background: rgba(110, 231, 255, 0.15);
+  border: 1px solid rgba(110, 231, 255, 0.3);
+  color: var(--accent);
+}
+
+/* Gym Log Styles */
+.gym-log-header,
+.tournament-header,
+.counter-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.gym-log-actions,
+.counter-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.gym-log-form,
+.tournament-form,
+.counter-form {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin-bottom: 24px;
+}
+
+.gym-log-filters {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.gym-log-filters .btn.active {
+  background: linear-gradient(135deg, rgba(110, 231, 255, 0.95), rgba(167, 139, 250, 0.95));
+  color: #071018;
+  border: none;
+}
+
+.workout-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+.workout-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 10px;
+}
+
+.workout-header h3 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.workout-date {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.workout-details {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.workout-weight {
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* Tournament Styles */
+.participant-input-group {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.participant-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.participant-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 13px;
+}
+
+.tournament-type {
+  display: inline-block;
+  padding: 4px 10px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--muted);
+  margin-left: 12px;
+}
+
+.tournament-list {
+  margin-top: 32px;
+}
+
+.tournament-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+.tournament-card h4 {
+  margin: 0 0 6px;
+  font-size: 16px;
+}
+
+.tournament-meta {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.bracket-container {
+  margin-top: 24px;
+}
+
+.bracket-round {
+  margin-bottom: 32px;
+}
+
+.bracket-round h3 {
+  margin: 0 0 16px;
+  font-size: 18px;
+  color: var(--muted);
+}
+
+.match {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+.match-players {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  justify-content: center;
+}
+
+.match-player {
+  flex: 1;
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text);
+  cursor: pointer;
+  transition: 0.18s ease;
+  font-size: 14px;
+}
+
+.match-player:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(110, 231, 255, 0.4);
+}
+
+.match-player.winner {
+  background: linear-gradient(135deg, rgba(110, 231, 255, 0.3), rgba(167, 139, 250, 0.3));
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+.vs {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* Counter Styles */
+.counter-form {
+  margin-bottom: 24px;
+}
+
+.counters-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+  margin-bottom: 32px;
+}
+
+.counter-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+}
+
+.counter-header-small {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.counter-header-small h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.counter-value {
+  margin-bottom: 16px;
+}
+
+.counter-input {
+  width: 100%;
+  text-align: center;
+  font-size: 32px;
+  font-weight: 700;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  color: var(--text);
+}
+
+.counter-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.counter-btn {
+  flex: 1;
+  padding: 12px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.counter-history {
+  margin-top: 32px;
+}
+
+.counter-history h3 {
+  margin: 0 0 16px;
+  font-size: 18px;
+}
+
+.history-list {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.history-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  font-size: 13px;
+}
+
+.history-item:last-child {
+  border-bottom: none;
+}
+
+.history-action {
+  font-weight: 500;
+  color: var(--text);
+}
+
+.history-detail {
+  color: var(--muted);
+}
+
+.history-time {
+  color: var(--muted2);
+  font-size: 12px;
+}
+
+/* Utility */
+.btn-icon {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 20px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: 0.18s ease;
+  line-height: 1;
+}
+
+.btn-icon:hover {
+  color: var(--danger);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+  .personal-nav-links {
+    display: none;
+  }
+
+  .counters-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .match-players {
+    flex-direction: column;
+  }
+
+  .vs {
+    transform: rotate(90deg);
+  }
+}

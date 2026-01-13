@@ -1,4 +1,4 @@
-or<!doctype html>
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
@@ -263,40 +263,10 @@ or<!doctype html>
       font-size:13px;
     }
     .social a:hover{border-color: rgba(255,255,255,.22)}
-
-    /* Cursor-follow UI */
-    .cursor-blob, .cursor-ring{
-      position: fixed; left:0; top:0;
-      pointer-events:none;
-      z-index:9999;
-      transform: translate(-50%, -50%);
-      will-change: transform;
-    }
-    .cursor-blob{
-      width: 46px; height: 46px;
-      border-radius: 999px;
-      background: radial-gradient(circle at 30% 30%, rgba(110,231,255,.65), rgba(167,139,250,.35));
-      filter: blur(2px);
-      opacity: .85;
-      mix-blend-mode: screen;
-    }
-    .cursor-ring{
-      width: 26px; height: 26px;
-      border-radius: 999px;
-      border: 1px solid rgba(255,255,255,.30);
-      opacity: .75;
-    }
-    @media (pointer: coarse){
-      .cursor-blob, .cursor-ring{display:none;}
-    }
   </style>
 </head>
 
 <body>
-  <!-- Cursor UI -->
-  <div class="cursor-blob" aria-hidden="true"></div>
-  <div class="cursor-ring" aria-hidden="true"></div>
-
   <!-- Nav -->
   <div class="nav">
     <div class="nav-inner">
@@ -525,46 +495,6 @@ or<!doctype html>
   </main>
 
   <script>
-    // ===== Cursor-follow UI (smooth) =====
-    const blob = document.querySelector('.cursor-blob');
-    const ring = document.querySelector('.cursor-ring');
-    let mouseX = window.innerWidth / 2, mouseY = window.innerHeight / 2;
-    let blobX = mouseX, blobY = mouseY;
-    let ringX = mouseX, ringY = mouseY;
-
-    window.addEventListener('mousemove', (e) => { mouseX = e.clientX; mouseY = e.clientY; });
-
-    function animate(){
-      // Blob lags more than ring for a soft “inertia” feel
-      blobX += (mouseX - blobX) * 0.12;
-      blobY += (mouseY - blobY) * 0.12;
-      ringX += (mouseX - ringX) * 0.22;
-      ringY += (mouseY - ringY) * 0.22;
-
-      blob.style.transform = `translate(${blobX}px, ${blobY}px) translate(-50%, -50%)`;
-      ring.style.transform = `translate(${ringX}px, ${ringY}px) translate(-50%, -50%)`;
-
-      requestAnimationFrame(animate);
-    }
-    requestAnimationFrame(animate);
-
-    // Hover “magnet” feel on interactive elements
-    const hoverables = document.querySelectorAll('a, button, .project');
-    hoverables.forEach(el => {
-      el.addEventListener('mouseenter', () => {
-        blob.style.opacity = '1';
-        ring.style.opacity = '0.95';
-        ring.style.width = '34px';
-        ring.style.height = '34px';
-      });
-      el.addEventListener('mouseleave', () => {
-        blob.style.opacity = '0.85';
-        ring.style.opacity = '0.75';
-        ring.style.width = '26px';
-        ring.style.height = '26px';
-      });
-    });
-
     // ===== Contact form: simple mailto fallback =====
     function handleSubmit(e){
       e.preventDefault();
@@ -576,7 +506,7 @@ or<!doctype html>
       // Static site: open user's email client
       const subject = encodeURIComponent(`Portfolio contact from ${name}`);
       const body = encodeURIComponent(`Name: ${name}\nEmail: ${email}\n\n${message}`);
-      window.location.href = `mailto:your.email@example.com?subject=${subject}&body=${body}`;
+      window.location.href = `mailto:shreykv@gmail.com?subject=${subject}&body=${body}`;
 
       status.textContent = 'Opening your email client…';
       return false;
