@@ -48,12 +48,15 @@ class API {
         if (key === 'counters') {
           return Promise.resolve({ counters: [], history: [] });
         }
+        if (key === 'habits') {
+          return Promise.resolve({ habits: [], entries: [] });
+        }
         return Promise.resolve([]);
       }
       return Promise.resolve(JSON.parse(data));
     } else if (method === 'POST') {
-      // Special handling for counters (stores object, not array)
-      if (key === 'counters') {
+      // Special handling for counters and habits (stores object, not array)
+      if (key === 'counters' || key === 'habits') {
         localStorage.setItem(key, JSON.stringify(options.body));
         return Promise.resolve(options.body);
       }
@@ -68,8 +71,8 @@ class API {
       localStorage.setItem(key, JSON.stringify(existing));
       return Promise.resolve(newItem);
     } else if (method === 'PUT') {
-      // Special handling for counters
-      if (key === 'counters') {
+      // Special handling for counters and habits
+      if (key === 'counters' || key === 'habits') {
         localStorage.setItem(key, JSON.stringify(options.body));
         return Promise.resolve(options.body);
       }
@@ -83,11 +86,19 @@ class API {
       localStorage.setItem(key, JSON.stringify(updated));
       return Promise.resolve(options.body);
     } else if (method === 'DELETE') {
-      // Special handling for counters
+      // Special handling for counters and habits
       if (key === 'counters') {
         // For counters, we don't delete the whole storage, just update
         const existing = JSON.parse(localStorage.getItem(key) || '{"counters":[],"history":[]}');
         existing.counters = existing.counters.filter(c => c.id !== options.body.id);
+        localStorage.setItem(key, JSON.stringify(existing));
+        return Promise.resolve({ success: true });
+      }
+      if (key === 'habits') {
+        // For habits, update the habits array
+        const existing = JSON.parse(localStorage.getItem(key) || '{"habits":[],"entries":[]}');
+        existing.habits = existing.habits.filter(h => h.id !== options.body.id);
+        existing.entries = existing.entries.filter(e => e.habitId !== options.body.id);
         localStorage.setItem(key, JSON.stringify(existing));
         return Promise.resolve({ success: true });
       }
@@ -180,6 +191,48 @@ class API {
 
   async deleteCounter(id) {
     return this.request('/api/counters', {
+      method: 'DELETE',
+      body: { id }
+    });
+  }
+
+  // Habit Tracker API methods
+  async getHabits() {
+    const data = await this.request('/api/habits', { method: 'GET' });
+    if (Array.isArray(data)) {
+      return { habits: [], entries: [] };
+    }
+    return data || { habits: [], entries: [] };
+  }
+
+  async saveHabits(data) {
+    return this.request('/api/habits', {
+      method: 'POST',
+      body: data
+    });
+  }
+
+  // Task/To-Do API methods
+  async getTasks() {
+    return this.request('/api/tasks', { method: 'GET' });
+  }
+
+  async createTask(task) {
+    return this.request('/api/tasks', {
+      method: 'POST',
+      body: task
+    });
+  }
+
+  async updateTask(task) {
+    return this.request('/api/tasks', {
+      method: 'PUT',
+      body: task
+    });
+  }
+
+  async deleteTask(id) {
+    return this.request('/api/tasks', {
       method: 'DELETE',
       body: { id }
     });
