@@ -119,7 +119,8 @@ class Tournament {
         player2: participants[i + 1] || 'BYE',
         winner: null,
         round: 0,
-        matchNum: firstRound.length + 1
+        matchNum: firstRound.length + 1,
+        bracket: 'winners'
       });
     }
 
@@ -140,7 +141,8 @@ class Tournament {
           player2: 'TBD',
           winner: null,
           round: roundNum,
-          matchNum: i + 1
+          matchNum: i + 1,
+          bracket: 'winners'
         });
       }
       rounds.push(nextRound);
@@ -168,8 +170,81 @@ class Tournament {
 
   generateDoubleElimination(participants) {
     const winners = this.generateSingleElimination(participants);
-    const losers = { rounds: [], type: 'losers' };
+    const losers = this.generateLosersBracket(participants.length);
     return { winners, losers, type: 'double-elimination' };
+  }
+
+  generateLosersBracket(numParticipants) {
+    const rounds = [];
+    const numWinnersRounds = Math.ceil(Math.log2(numParticipants));
+    
+    // Losers bracket structure is more complex
+    // First round: Losers from winners bracket round 1
+    // Subsequent rounds: Mix of losers from winners bracket and winners from losers bracket
+    
+    // Calculate number of matches in first losers round (losers from winners round 1)
+    const firstLosersRoundMatches = Math.ceil(numParticipants / 4); // Half of winners round 1 matches
+    const firstRound = [];
+    for (let i = 0; i < firstLosersRoundMatches; i++) {
+      firstRound.push({
+        id: `losers-r0-${i}`,
+        player1: 'TBD',
+        player2: 'TBD',
+        winner: null,
+        round: 0,
+        matchNum: i + 1,
+        bracket: 'losers'
+      });
+    }
+    rounds.push(firstRound);
+
+    // Generate subsequent losers bracket rounds
+    // The structure alternates between receiving from winners bracket and from previous losers round
+    let currentRoundSize = firstLosersRoundMatches;
+    let roundNum = 1;
+    
+    // For each winners bracket round (after round 1), there will be corresponding losers bracket rounds
+    for (let wRound = 1; wRound < numWinnersRounds; wRound++) {
+      // Round that receives losers from current winners bracket round
+      const numMatches = Math.ceil(currentRoundSize / 2);
+      const nextRound = [];
+      for (let i = 0; i < numMatches; i++) {
+        nextRound.push({
+          id: `losers-r${roundNum}-${i}`,
+          player1: 'TBD',
+          player2: 'TBD',
+          winner: null,
+          round: roundNum,
+          matchNum: i + 1,
+          bracket: 'losers'
+        });
+      }
+      rounds.push(nextRound);
+      currentRoundSize = numMatches;
+      roundNum++;
+      
+      // Round that receives winners from previous losers round (if not the last round)
+      if (wRound < numWinnersRounds - 1) {
+        const numMatches2 = Math.ceil(currentRoundSize / 2);
+        const nextRound2 = [];
+        for (let i = 0; i < numMatches2; i++) {
+          nextRound2.push({
+            id: `losers-r${roundNum}-${i}`,
+            player1: 'TBD',
+            player2: 'TBD',
+            winner: null,
+            round: roundNum,
+            matchNum: i + 1,
+            bracket: 'losers'
+          });
+        }
+        rounds.push(nextRound2);
+        currentRoundSize = numMatches2;
+        roundNum++;
+      }
+    }
+
+    return { rounds, type: 'losers' };
   }
 
   async viewTournament(id) {
@@ -181,13 +256,28 @@ class Tournament {
   async recordMatchResult(matchId, winner) {
     if (!this.currentTournament) return;
 
-    const updateMatch = (rounds) => {
+    const updateMatch = (rounds, bracketType) => {
       for (const round of rounds) {
         for (const match of round) {
           if (match.id === matchId) {
             match.winner = winner;
-            // Auto-advance winner to next round if applicable
-            this.advanceWinner(match, rounds);
+            
+            // Handle double elimination
+            if (this.currentTournament.bracket.type === 'double-elimination') {
+              if (bracketType === 'winners') {
+                // Advance winner to next winners bracket round
+                this.advanceWinner(match, rounds);
+                // Advance loser to losers bracket
+                this.advanceLoser(match, this.currentTournament.bracket.winners.rounds, this.currentTournament.bracket.losers.rounds);
+              } else if (bracketType === 'losers') {
+                // Advance winner to next losers bracket round
+                this.advanceWinner(match, rounds);
+                // Loser is eliminated (no further advancement)
+              }
+            } else {
+              // Single elimination - just advance winner
+              this.advanceWinner(match, rounds);
+            }
             return true;
           }
         }
@@ -195,10 +285,62 @@ class Tournament {
       return false;
     };
 
-    if (this.currentTournament.bracket.winners) {
-      updateMatch(this.currentTournament.bracket.winners.rounds);
+    if (this.currentTournament.bracket.type === 'double-elimination') {
+      // Check grand final matches first
+      if (this.currentTournament.bracket.grandFinal2) {
+        for (const match of this.currentTournament.bracket.grandFinal2) {
+          if (match.id === matchId) {
+            match.winner = winner;
+            // Grand final 2 winner is the tournament winner - no further advancement needed
+            try {
+              await api.updateTournament(this.currentTournament);
+              await this.loadTournaments();
+              this.render();
+            } catch (error) {
+              console.error('Error updating tournament:', error);
+            }
+            return;
+          }
+        }
+      }
+      if (this.currentTournament.bracket.grandFinal) {
+        for (const match of this.currentTournament.bracket.grandFinal) {
+          if (match.id === matchId) {
+            match.winner = winner;
+            // If losers bracket champion wins, create grand final 2
+            const winnersChampion = this.getBracketChampion(this.currentTournament.bracket.winners.rounds);
+            if (winner !== winnersChampion && !this.currentTournament.bracket.grandFinal2) {
+              this.currentTournament.bracket.grandFinal2 = [{
+                id: 'grand-final-2',
+                player1: winnersChampion,
+                player2: winner,
+                winner: null,
+                round: 0,
+                matchNum: 1,
+                bracket: 'grand-final'
+              }];
+            }
+            try {
+              await api.updateTournament(this.currentTournament);
+              await this.loadTournaments();
+              this.render();
+            } catch (error) {
+              console.error('Error updating tournament:', error);
+            }
+            return;
+          }
+        }
+      }
+      // Check winners bracket
+      let found = updateMatch(this.currentTournament.bracket.winners.rounds, 'winners');
+      if (!found) {
+        // Check losers bracket
+        updateMatch(this.currentTournament.bracket.losers.rounds, 'losers');
+      }
+    } else if (this.currentTournament.bracket.winners) {
+      updateMatch(this.currentTournament.bracket.winners.rounds, 'winners');
     } else {
-      updateMatch(this.currentTournament.bracket.rounds);
+      updateMatch(this.currentTournament.bracket.rounds, 'single');
     }
 
     try {
@@ -230,6 +372,54 @@ class Tournament {
     }
   }
 
+  advanceLoser(match, winnersRounds, losersRounds) {
+    if (!match.winner) return;
+    
+    const loser = match.winner === match.player1 ? match.player2 : match.player1;
+    if (!loser || loser === 'BYE' || loser === 'TBD') return;
+
+    const winnersRound = match.round;
+    
+    // Determine which losers bracket round this loser should go to
+    if (winnersRound === 0) {
+      // Losers from winners bracket round 1 go to losers bracket round 1
+      if (losersRounds.length > 0 && losersRounds[0].length > 0) {
+        const losersRound1 = losersRounds[0];
+        // Match losers from adjacent winners bracket matches
+        const matchIndex = Math.floor((match.matchNum - 1) / 2);
+        if (matchIndex < losersRound1.length) {
+          const targetMatch = losersRound1[matchIndex];
+          // Fill in the first available slot
+          if (targetMatch.player1 === 'TBD') {
+            targetMatch.player1 = loser;
+          } else if (targetMatch.player2 === 'TBD') {
+            targetMatch.player2 = loser;
+          }
+        }
+      }
+    } else {
+      // Losers from later winners bracket rounds
+      // The pattern: winners round 1 → losers round 1, winners round 2 → losers round 2, etc.
+      // But losers bracket rounds alternate between receiving from winners and from previous losers round
+      // Simplified: winners round N losers go to losers round (N*2 - 1)
+      const losersRoundIndex = winnersRound * 2 - 1;
+      if (losersRoundIndex < losersRounds.length && losersRounds[losersRoundIndex].length > 0) {
+        const targetLosersRound = losersRounds[losersRoundIndex];
+        // Calculate which match in the losers bracket
+        const matchIndex = Math.floor((match.matchNum - 1) / 2);
+        if (matchIndex < targetLosersRound.length) {
+          const targetMatch = targetLosersRound[matchIndex];
+          // Fill in the first available slot
+          if (targetMatch.player1 === 'TBD') {
+            targetMatch.player1 = loser;
+          } else if (targetMatch.player2 === 'TBD') {
+            targetMatch.player2 = loser;
+          }
+        }
+      }
+    }
+  }
+
   getTournamentStats() {
     if (!this.currentTournament) return null;
 
@@ -254,7 +444,39 @@ class Tournament {
       });
     };
 
-    if (this.currentTournament.bracket.winners) {
+    if (this.currentTournament.bracket.type === 'double-elimination') {
+      // Process winners bracket
+      processMatches(this.currentTournament.bracket.winners.rounds);
+      // Process losers bracket
+      processMatches(this.currentTournament.bracket.losers.rounds);
+      // Process grand final(s)
+      if (this.currentTournament.bracket.grandFinal) {
+        this.currentTournament.bracket.grandFinal.forEach(match => {
+          if (match.winner) {
+            stats[match.winner].wins++;
+            stats[match.winner].matches++;
+            const loser = match.winner === match.player1 ? match.player2 : match.player1;
+            if (loser && loser !== 'BYE' && stats[loser]) {
+              stats[loser].losses++;
+              stats[loser].matches++;
+            }
+          }
+        });
+      }
+      if (this.currentTournament.bracket.grandFinal2) {
+        this.currentTournament.bracket.grandFinal2.forEach(match => {
+          if (match.winner) {
+            stats[match.winner].wins++;
+            stats[match.winner].matches++;
+            const loser = match.winner === match.player1 ? match.player2 : match.player1;
+            if (loser && loser !== 'BYE' && stats[loser]) {
+              stats[loser].losses++;
+              stats[loser].matches++;
+            }
+          }
+        });
+      }
+    } else if (this.currentTournament.bracket.winners) {
       processMatches(this.currentTournament.bracket.winners.rounds);
     } else {
       processMatches(this.currentTournament.bracket.rounds);
@@ -284,7 +506,25 @@ class Tournament {
       });
     };
 
-    if (this.currentTournament.bracket.winners) {
+    if (this.currentTournament.bracket.type === 'double-elimination') {
+      // Process winners bracket
+      processMatches(this.currentTournament.bracket.winners.rounds);
+      // Process losers bracket
+      processMatches(this.currentTournament.bracket.losers.rounds);
+      // Process grand final(s)
+      if (this.currentTournament.bracket.grandFinal) {
+        this.currentTournament.bracket.grandFinal.forEach(match => {
+          total++;
+          if (match.winner) completed++;
+        });
+      }
+      if (this.currentTournament.bracket.grandFinal2) {
+        this.currentTournament.bracket.grandFinal2.forEach(match => {
+          total++;
+          if (match.winner) completed++;
+        });
+      }
+    } else if (this.currentTournament.bracket.winners) {
       processMatches(this.currentTournament.bracket.winners.rounds);
     } else {
       processMatches(this.currentTournament.bracket.rounds);
@@ -310,6 +550,25 @@ class Tournament {
         if (hasPlayedMatches) {
           return stats[0].player; // Player with most wins (sorted by wins then win rate)
         }
+      }
+      return null;
+    }
+
+    // For double elimination, check grand final(s)
+    if (this.currentTournament.bracket.type === 'double-elimination') {
+      // Check grand final 2 first (if it exists and has a winner)
+      if (this.currentTournament.bracket.grandFinal2 && this.currentTournament.bracket.grandFinal2[0]?.winner) {
+        return this.currentTournament.bracket.grandFinal2[0].winner;
+      }
+      // Check grand final 1 (only if winners bracket champion won)
+      if (this.currentTournament.bracket.grandFinal && this.currentTournament.bracket.grandFinal[0]?.winner) {
+        const winnersChampion = this.getBracketChampion(this.currentTournament.bracket.winners.rounds);
+        // If winners bracket champion won grand final 1, they're the winner
+        if (this.currentTournament.bracket.grandFinal[0].winner === winnersChampion) {
+          return winnersChampion;
+        }
+        // Otherwise, need grand final 2
+        return null;
       }
       return null;
     }
@@ -456,7 +715,120 @@ class Tournament {
       return this.renderRoundRobinBracket(bracket);
     }
 
+    if (bracket.type === 'double-elimination') {
+      return this.renderDoubleEliminationBracket(bracket);
+    }
+
     return this.renderVisualBracket(bracket);
+  }
+
+  renderDoubleEliminationBracket(bracket) {
+    if (!bracket || !bracket.winners || !bracket.losers) return '';
+    
+    let html = '<div class="double-elimination-container">';
+    
+    // Render Winners Bracket
+    html += '<div class="bracket-section">';
+    html += '<h3 class="bracket-section-title">Winners Bracket</h3>';
+    html += this.renderVisualBracket(bracket.winners);
+    html += '</div>';
+    
+    // Render Losers Bracket
+    html += '<div class="bracket-section">';
+    html += '<h3 class="bracket-section-title">Losers Bracket</h3>';
+    html += this.renderVisualBracket(bracket.losers);
+    html += '</div>';
+    
+    // Render Grand Final if both brackets have champions
+    const winnersChampion = this.getBracketChampion(bracket.winners.rounds);
+    const losersChampion = this.getBracketChampion(bracket.losers.rounds);
+    
+    if (winnersChampion && losersChampion) {
+      html += '<div class="bracket-section grand-final">';
+      html += '<h3 class="bracket-section-title">Grand Final</h3>';
+      
+      // Check if grand final exists in bracket, if not create it
+      if (!bracket.grandFinal) {
+        bracket.grandFinal = [{
+          id: 'grand-final-1',
+          player1: winnersChampion,
+          player2: losersChampion,
+          winner: null,
+          round: 0,
+          matchNum: 1,
+          bracket: 'grand-final'
+        }];
+      }
+      
+      const grandFinal = bracket.grandFinal[0];
+      const canClickPlayer1 = grandFinal.player1 && !grandFinal.winner;
+      const canClickPlayer2 = grandFinal.player2 && !grandFinal.winner;
+      
+      html += `
+        <div class="bracket-match grand-final-match">
+          <div class="bracket-player ${grandFinal.winner === grandFinal.player1 ? 'winner' : ''}" 
+               ${canClickPlayer1 ? `onclick="tournament.recordMatchResult('${grandFinal.id}', '${grandFinal.player1}')"` : ''} 
+               style="${canClickPlayer1 ? 'cursor: pointer;' : 'cursor: default; opacity: 0.6;'}">
+            ${grandFinal.player1 || 'TBD'}
+          </div>
+          <div class="bracket-vs">vs</div>
+          <div class="bracket-player ${grandFinal.winner === grandFinal.player2 ? 'winner' : ''}" 
+               ${canClickPlayer2 ? `onclick="tournament.recordMatchResult('${grandFinal.id}', '${grandFinal.player2}')"` : ''} 
+               style="${canClickPlayer2 ? 'cursor: pointer;' : 'cursor: default; opacity: 0.6;'}">
+            ${grandFinal.player2 || 'TBD'}
+          </div>
+        </div>
+      `;
+      
+      // Check if second grand final is needed (if losers bracket champion won first grand final)
+      if (grandFinal.winner === losersChampion && !bracket.grandFinal2) {
+        bracket.grandFinal2 = [{
+          id: 'grand-final-2',
+          player1: winnersChampion,
+          player2: losersChampion,
+          winner: null,
+          round: 0,
+          matchNum: 1,
+          bracket: 'grand-final'
+        }];
+      }
+      
+      if (bracket.grandFinal2) {
+        const grandFinal2 = bracket.grandFinal2[0];
+        const canClickPlayer1_2 = grandFinal2.player1 && !grandFinal2.winner;
+        const canClickPlayer2_2 = grandFinal2.player2 && !grandFinal2.winner;
+        
+        html += '<h4 class="bracket-section-subtitle">Grand Final 2 (if needed)</h4>';
+        html += `
+          <div class="bracket-match grand-final-match">
+            <div class="bracket-player ${grandFinal2.winner === grandFinal2.player1 ? 'winner' : ''}" 
+                 ${canClickPlayer1_2 ? `onclick="tournament.recordMatchResult('${grandFinal2.id}', '${grandFinal2.player1}')"` : ''} 
+                 style="${canClickPlayer1_2 ? 'cursor: pointer;' : 'cursor: default; opacity: 0.6;'}">
+              ${grandFinal2.player1 || 'TBD'}
+            </div>
+            <div class="bracket-vs">vs</div>
+            <div class="bracket-player ${grandFinal2.winner === grandFinal2.player2 ? 'winner' : ''}" 
+                 ${canClickPlayer2_2 ? `onclick="tournament.recordMatchResult('${grandFinal2.id}', '${grandFinal2.player2}')"` : ''} 
+                 style="${canClickPlayer2_2 ? 'cursor: pointer;' : 'cursor: default; opacity: 0.6;'}">
+              ${grandFinal2.player2 || 'TBD'}
+            </div>
+          </div>
+        `;
+      }
+      
+      html += '</div>';
+    }
+    
+    html += '</div>';
+    return html;
+  }
+
+  getBracketChampion(rounds) {
+    if (!rounds || rounds.length === 0) return null;
+    const finalRound = rounds[rounds.length - 1];
+    if (!finalRound || finalRound.length === 0) return null;
+    const finalMatch = finalRound[0];
+    return finalMatch.winner || null;
   }
 
   render() {
