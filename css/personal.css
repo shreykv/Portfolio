@@ -1490,10 +1490,162 @@
   font-size: 14px;
 }
 
+/* Personal Landing Dashboard */
+.personal-landing {
+  padding: 40px 0;
+}
+
+.personal-landing-header {
+  text-align: center;
+  margin-bottom: 48px;
+}
+
+.personal-landing-header h1 {
+  font-size: 36px;
+  font-weight: 700;
+  margin: 0 0 12px;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.personal-landing-header p {
+  color: var(--muted);
+  font-size: 16px;
+  margin: 0;
+}
+
+.personal-landing-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 24px;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+.personal-landing-card {
+  width: 100%;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 32px;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  text-align: left;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-height: 200px;
+  text-decoration: none;
+  color: inherit;
+  box-shadow: var(--shadow);
+  font-family: var(--font);
+  font-size: inherit;
+  margin: 0;
+  outline: none;
+}
+
+.personal-landing-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, var(--accent), var(--accent2));
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.25s ease;
+}
+
+.personal-landing-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(110, 231, 255, 0.4);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.06));
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+}
+
+.personal-landing-card:hover::before {
+  transform: scaleX(1);
+}
+
+.personal-landing-card:active {
+  transform: translateY(-2px);
+}
+
+.card-icon {
+  font-size: 48px;
+  line-height: 1;
+  margin-bottom: 8px;
+  filter: drop-shadow(0 4px 8px rgba(110, 231, 255, 0.2));
+  transition: transform 0.25s ease;
+}
+
+.personal-landing-card:hover .card-icon {
+  transform: scale(1.1) rotate(5deg);
+}
+
+.card-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.card-body h2 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.card-body p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
 /* Responsive */
 @media (max-width: 640px) {
+  .personal-nav-inner {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
   .personal-nav-links {
-    display: none;
+    width: 100%;
+    overflow-x: auto;
+    padding-bottom: 6px;
+  }
+
+  .personal-nav-links a {
+    white-space: nowrap;
+  }
+
+  .personal-landing-header h1 {
+    font-size: 28px;
+  }
+
+  .personal-landing-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .personal-landing-card {
+    padding: 24px;
+    min-height: 180px;
+  }
+
+  .card-icon {
+    font-size: 40px;
+  }
+
+  .card-body h2 {
+    font-size: 20px;
   }
 
   .counters-grid {

@@ -65,7 +65,7 @@ git push -u origin main
 
 ## Step 5: Enable GitHub Pages
 
-1. Go to your repository on GitHub: `https://github.com/YOUR_USERNAME/shreykv.github.io`
+1. Go to your repository on GitHub: `https://github.com/shreykv/shreykv.github.io`
 2. Click **Settings** tab
 3. Scroll down to **Pages** section (left sidebar)
 4. Under **Source**, select:

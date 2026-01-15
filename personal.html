@@ -86,11 +86,10 @@
         <span>Shrey Vasisht</span>
       </a>
       <div class="personal-nav-links">
+        <a href="#" data-route="#/personal" id="nav-personal-home">Overview</a>
         <a href="#" data-route="#/personal/gym-log" id="nav-gym-log">Gym Log</a>
         <a href="#" data-route="#/personal/tournament" id="nav-tournament">Tournament</a>
         <a href="#" data-route="#/personal/counter" id="nav-counter">Counter</a>
-        <a href="#" data-route="#/personal/habit-tracker" id="nav-habit-tracker">Habits</a>
-        <a href="#" data-route="#/personal/todo-list" id="nav-todo-list">Tasks</a>
         <a href="/" class="btn">Back to Portfolio</a>
         <button class="btn" onclick="auth.logout(); window.location.href='/personal';">Logout</button>
       </div>
@@ -114,8 +113,6 @@
   <script src="js/gym-log.js"></script>
   <script src="js/tournament.js"></script>
   <script src="js/counter.js"></script>
-  <script src="js/habit-tracker.js"></script>
-  <script src="js/todo-list.js"></script>
   <script>
     // Initialize authentication check
     const passwordModal = document.getElementById('password-modal');
@@ -161,8 +158,51 @@
     function initializeApp() {
       // Register routes (using hash-based routing)
       router.register('/personal', () => {
-        // Default route - redirect to gym log
-        router.navigate('#/personal/gym-log', true);
+        const appContent = document.getElementById('app-content');
+        appContent.innerHTML = `
+          <section class="personal-landing">
+            <header class="personal-landing-header">
+              <h1>Personal Dashboard</h1>
+              <p>Choose a mini app to get started.</p>
+            </header>
+            <div class="personal-landing-grid">
+              <button class="personal-landing-card" data-route="#/personal/gym-log" type="button">
+                <div class="card-icon">🏋️</div>
+                <div class="card-body">
+                  <h2>Gym Log</h2>
+                  <p>Track workouts, volume, and progress over time.</p>
+                </div>
+              </button>
+              <button class="personal-landing-card" data-route="#/personal/tournament" type="button">
+                <div class="card-icon">🏆</div>
+                <div class="card-body">
+                  <h2>Tournament</h2>
+                  <p>Create brackets and record match results.</p>
+                </div>
+              </button>
+              <button class="personal-landing-card" data-route="#/personal/counter" type="button">
+                <div class="card-icon">🔢</div>
+                <div class="card-body">
+                  <h2>Counters</h2>
+                  <p>Track reps, sets, or any custom counts.</p>
+                </div>
+              </button>
+            </div>
+          </section>
+        `;
+        
+        // Add click handlers to make entire cards clickable
+        const cards = appContent.querySelectorAll('.personal-landing-card');
+        cards.forEach(card => {
+          card.addEventListener('click', (e) => {
+            const route = card.getAttribute('data-route');
+            if (route) {
+              router.navigate(route);
+            }
+          });
+        });
+        
+        updateActiveNav('nav-personal-home');
       });
 
       router.register('/personal/gym-log', () => {
@@ -183,29 +223,18 @@
         counter.render();
       });
 
-      router.register('/personal/habit-tracker', () => {
-        document.getElementById('app-content').innerHTML = '<div id="habit-tracker-content"></div>';
-        updateActiveNav('nav-habit-tracker');
-        habitTracker.render();
-      });
-
-      router.register('/personal/todo-list', () => {
-        document.getElementById('app-content').innerHTML = '<div id="todo-list-content"></div>';
-        updateActiveNav('nav-todo-list');
-        todoList.render();
-      });
-
       // Handle direct access to personal.html (no hash)
       if (!window.location.hash && window.location.pathname.includes('personal')) {
-        router.navigate('#/personal/gym-log', true);
+        router.navigate('#/personal', true);
       }
 
       router.setNotFound(() => {
-        document.getElementById('app-content').innerHTML = `
+        const appContent = document.getElementById('app-content');
+        appContent.innerHTML = `
           <div style="text-align:center; padding:60px 20px;">
             <h2>404 - Page Not Found</h2>
             <p style="color:var(--muted); margin:16px 0 24px;">The page you're looking for doesn't exist.</p>
-            <a href="#" data-route="#/personal/gym-log" class="btn primary">Go to Gym Log</a>
+            <a href="#" data-route="#/personal" class="btn primary">Go to Personal Overview</a>
           </div>
         `;
       });
@@ -231,8 +260,6 @@
     window.gymLog = gymLog;
     window.tournament = tournament;
     window.counter = counter;
-    window.habitTracker = habitTracker;
-    window.todoList = todoList;
   </script>
 </body>
 </html>
