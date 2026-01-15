@@ -381,35 +381,75 @@ class Tournament {
     const winnersRound = match.round;
     
     // Determine which losers bracket round this loser should go to
+    // Based on generateLosersBracket structure:
+    // - Round 0: receives losers from winners round 0
+    // - Round 1: receives losers from winners round 1 (created when wRound=1)
+    // - Round 3: receives losers from winners round 2 (created when wRound=2)
+    // - Round 5: receives losers from winners round 3 (created when wRound=3)
+    // Pattern: Winners Round N → Losers Round (2*N - 1) for N >= 1, Round 0 → Round 0
+    
+    let losersRoundIndex;
     if (winnersRound === 0) {
-      // Losers from winners bracket round 1 go to losers bracket round 1
-      if (losersRounds.length > 0 && losersRounds[0].length > 0) {
-        const losersRound1 = losersRounds[0];
-        // Match losers from adjacent winners bracket matches
+      losersRoundIndex = 0;
+    } else {
+      // For winners round N (N >= 1), losers go to losers round (2*N - 1)
+      losersRoundIndex = (winnersRound * 2) - 1;
+    }
+    
+    // Ensure the round exists
+    if (losersRoundIndex >= losersRounds.length || losersRoundIndex < 0) {
+      // If the round doesn't exist, try to find the last available round that can accept this loser
+      console.warn(`Losers bracket round ${losersRoundIndex} doesn't exist for winners round ${winnersRound}, finding alternative`);
+      for (let i = losersRounds.length - 1; i >= 0; i--) {
+        const round = losersRounds[i];
+        for (const m of round) {
+          if (m.player1 === 'TBD' || m.player2 === 'TBD') {
+            if (m.player1 === 'TBD') {
+              m.player1 = loser;
+            } else {
+              m.player2 = loser;
+            }
+            return;
+          }
+        }
+      }
+      return;
+    }
+    
+    if (losersRounds[losersRoundIndex].length > 0) {
+      const targetLosersRound = losersRounds[losersRoundIndex];
+      
+      // Find an available match in this round
+      // For round 0, pair losers from adjacent winners matches
+      if (winnersRound === 0) {
         const matchIndex = Math.floor((match.matchNum - 1) / 2);
-        if (matchIndex < losersRound1.length) {
-          const targetMatch = losersRound1[matchIndex];
-          // Fill in the first available slot
+        if (matchIndex < targetLosersRound.length) {
+          const targetMatch = targetLosersRound[matchIndex];
           if (targetMatch.player1 === 'TBD') {
             targetMatch.player1 = loser;
           } else if (targetMatch.player2 === 'TBD') {
             targetMatch.player2 = loser;
           }
         }
-      }
-    } else {
-      // Losers from later winners bracket rounds
-      // The pattern: winners round 1 → losers round 1, winners round 2 → losers round 2, etc.
-      // But losers bracket rounds alternate between receiving from winners and from previous losers round
-      // Simplified: winners round N losers go to losers round (N*2 - 1)
-      const losersRoundIndex = winnersRound * 2 - 1;
-      if (losersRoundIndex < losersRounds.length && losersRounds[losersRoundIndex].length > 0) {
-        const targetLosersRound = losersRounds[losersRoundIndex];
-        // Calculate which match in the losers bracket
+      } else {
+        // For later rounds, find an available slot
+        // Try to match based on match number first, then find any available slot
         const matchIndex = Math.floor((match.matchNum - 1) / 2);
+        let targetMatch = null;
+        
         if (matchIndex < targetLosersRound.length) {
-          const targetMatch = targetLosersRound[matchIndex];
-          // Fill in the first available slot
+          targetMatch = targetLosersRound[matchIndex];
+        } else {
+          // If calculated index is out of bounds, find first available match
+          for (const m of targetLosersRound) {
+            if (m.player1 === 'TBD' || m.player2 === 'TBD') {
+              targetMatch = m;
+              break;
+            }
+          }
+        }
+        
+        if (targetMatch) {
           if (targetMatch.player1 === 'TBD') {
             targetMatch.player1 = loser;
           } else if (targetMatch.player2 === 'TBD') {
