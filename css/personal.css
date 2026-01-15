@@ -608,6 +608,7 @@
   flex-direction: column;
   min-width: 200px;
   gap: 16px;
+  justify-content: center;
 }
 
 .round-label {
@@ -622,6 +623,8 @@
   display: flex;
   flex-direction: column;
   gap: 20px;
+  justify-content: center;
+  align-items: stretch;
 }
 
 .bracket-match {

@@ -109,39 +109,41 @@ class Tournament {
 
   generateSingleElimination(participants) {
     const rounds = [];
-    let currentRound = [];
     
-    // First round
+    // First round only - subsequent rounds will be created dynamically
+    const firstRound = [];
     for (let i = 0; i < participants.length; i += 2) {
-      currentRound.push({
-        id: `match-r0-${i / 2}`,
+      firstRound.push({
+        id: `match-r0-${firstRound.length}`,
         player1: participants[i],
         player2: participants[i + 1] || 'BYE',
         winner: null,
         round: 0,
-        matchNum: currentRound.length
+        matchNum: firstRound.length + 1
       });
     }
 
-    rounds.push([...currentRound]);
+    rounds.push(firstRound);
 
-    // Generate subsequent rounds
-    let roundNum = 1;
-    while (currentRound.length > 1) {
+    // Calculate how many rounds we'll need
+    let numParticipants = participants.length;
+    let numRounds = Math.ceil(Math.log2(numParticipants));
+    
+    // Create empty subsequent rounds with TBD players
+    for (let roundNum = 1; roundNum < numRounds; roundNum++) {
+      const numMatches = Math.ceil(rounds[roundNum - 1].length / 2);
       const nextRound = [];
-      for (let i = 0; i < currentRound.length; i += 2) {
+      for (let i = 0; i < numMatches; i++) {
         nextRound.push({
-          id: `match-r${roundNum}-${nextRound.length}`,
-          player1: currentRound[i].winner || (currentRound[i].player1 !== 'BYE' ? currentRound[i].player1 : currentRound[i].player2),
-          player2: currentRound[i + 1] ? (currentRound[i + 1].winner || (currentRound[i + 1].player1 !== 'BYE' ? currentRound[i + 1].player1 : currentRound[i + 1].player2)) : 'BYE',
+          id: `match-r${roundNum}-${i}`,
+          player1: 'TBD',
+          player2: 'TBD',
           winner: null,
           round: roundNum,
-          matchNum: nextRound.length
+          matchNum: i + 1
         });
       }
       rounds.push(nextRound);
-      currentRound = nextRound;
-      roundNum++;
     }
 
     return { rounds, type: 'single-elimination' };
@@ -212,9 +214,14 @@ class Tournament {
     if (match.round + 1 >= rounds.length) return;
     
     const nextRound = rounds[match.round + 1];
-    const nextMatchIndex = Math.floor(match.matchNum / 2) - (match.matchNum % 2 === 0 ? 1 : 0);
+    // Calculate which match in the next round this winner should go to
+    // Match 1 and 2 go to match 1, Match 3 and 4 go to match 2, etc.
+    const nextMatchIndex = Math.ceil(match.matchNum / 2) - 1;
+    
     if (nextMatchIndex >= 0 && nextMatchIndex < nextRound.length) {
       const nextMatch = nextRound[nextMatchIndex];
+      // Determine if this winner should be player1 or player2
+      // Odd match numbers (1, 3, 5...) go to player1, even (2, 4, 6...) go to player2
       if (match.matchNum % 2 === 1) {
         nextMatch.player1 = match.winner;
       } else {
@@ -293,6 +300,19 @@ class Tournament {
   getWinner() {
     if (!this.currentTournament) return null;
 
+    // For round robin, determine winner based on stats
+    if (this.currentTournament.bracket.type === 'round-robin') {
+      const stats = this.getTournamentStats();
+      if (stats && stats.length > 0) {
+        // Check if all matches are complete
+        const progress = this.getTournamentProgress();
+        if (progress.percentage === 100) {
+          return stats[0].player; // Player with most wins
+        }
+      }
+      return null;
+    }
+
     const rounds = this.currentTournament.bracket.winners 
       ? this.currentTournament.bracket.winners.rounds 
       : this.currentTournament.bracket.rounds;
@@ -336,31 +356,49 @@ class Tournament {
     }
 
     const rounds = bracket.winners ? bracket.winners.rounds : bracket.rounds;
-    const numRounds = rounds.length;
+    
+    // Filter to only show rounds that are ready (first round or previous round is complete)
+    const visibleRounds = [];
+    rounds.forEach((round, roundIdx) => {
+      const shouldShowRound = roundIdx === 0 || this.isRoundComplete(rounds[roundIdx - 1]);
+      if (shouldShowRound) {
+        visibleRounds.push({ round, roundIdx });
+      }
+    });
+    
+    const numVisibleRounds = visibleRounds.length;
+    if (numVisibleRounds === 0) return '<div class="visual-bracket"></div>';
     
     let html = '<div class="visual-bracket">';
     
-    rounds.forEach((round, roundIdx) => {
-      const roundWidth = 100 / numRounds;
+    visibleRounds.forEach(({ round, roundIdx }) => {
+      const roundWidth = 100 / numVisibleRounds;
+      
       html += `
         <div class="bracket-round-visual" style="width: ${roundWidth}%">
           <div class="round-label">${roundIdx === rounds.length - 1 ? 'Final' : roundIdx === rounds.length - 2 ? 'Semifinal' : `Round ${roundIdx + 1}`}</div>
-          <div class="round-matches">
+          <div class="round-matches" data-round="${roundIdx}">
       `;
 
       round.forEach((match, matchIdx) => {
+        // Only allow clicking if both players are determined (not TBD) and match isn't finished
+        const canClick = match.player1 !== 'TBD' && match.player2 !== 'TBD' && match.player2 !== 'BYE' && !match.winner;
+        const clickHandler1 = canClick ? `onclick="tournament.recordMatchResult('${match.id}', '${match.player1}')"` : '';
+        const clickHandler2 = canClick && match.player2 !== 'BYE' ? `onclick="tournament.recordMatchResult('${match.id}', '${match.player2}')"` : '';
+        const cursorStyle = canClick ? 'cursor: pointer;' : 'cursor: default; opacity: 0.6;';
+        
         html += `
           <div class="bracket-match">
             <div class="bracket-player ${match.winner === match.player1 ? 'winner' : ''}" 
-                 onclick="tournament.recordMatchResult('${match.id}', '${match.player1}')">
+                 ${clickHandler1} style="${cursorStyle}">
               ${match.player1 || 'TBD'}
             </div>
             <div class="bracket-vs">vs</div>
             <div class="bracket-player ${match.winner === match.player2 ? 'winner' : ''}" 
-                 onclick="tournament.recordMatchResult('${match.id}', '${match.player2}')">
+                 ${clickHandler2} style="${cursorStyle}">
               ${match.player2 || 'TBD'}
             </div>
-            ${roundIdx < rounds.length - 1 ? '<div class="bracket-connector"></div>' : ''}
+            ${roundIdx < rounds.length - 1 && this.isRoundComplete(round) ? '<div class="bracket-connector"></div>' : ''}
           </div>
         `;
       });
@@ -373,6 +411,11 @@ class Tournament {
     
     html += '</div>';
     return html;
+  }
+
+  isRoundComplete(round) {
+    if (!round || round.length === 0) return false;
+    return round.every(match => match.winner !== null);
   }
 
   renderRoundRobinBracket(bracket) {
