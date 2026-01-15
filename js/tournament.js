@@ -300,14 +300,15 @@ class Tournament {
   getWinner() {
     if (!this.currentTournament) return null;
 
-    // For round robin, determine winner based on stats
+    // For round robin, return current leader based on stats (even if not 100% complete)
     if (this.currentTournament.bracket.type === 'round-robin') {
       const stats = this.getTournamentStats();
       if (stats && stats.length > 0) {
-        // Check if all matches are complete
-        const progress = this.getTournamentProgress();
-        if (progress.percentage === 100) {
-          return stats[0].player; // Player with most wins
+        // Return the current leader (player with best win rate)
+        // Only return null if no matches have been played yet
+        const hasPlayedMatches = stats.some(stat => stat.matches > 0);
+        if (hasPlayedMatches) {
+          return stats[0].player; // Player with most wins (sorted by wins then win rate)
         }
       }
       return null;
@@ -381,21 +382,27 @@ class Tournament {
       `;
 
       round.forEach((match, matchIdx) => {
-        // Only allow clicking if both players are determined (not TBD) and match isn't finished
-        const canClick = match.player1 !== 'TBD' && match.player2 !== 'TBD' && match.player2 !== 'BYE' && !match.winner;
-        const clickHandler1 = canClick ? `onclick="tournament.recordMatchResult('${match.id}', '${match.player1}')"` : '';
-        const clickHandler2 = canClick && match.player2 !== 'BYE' ? `onclick="tournament.recordMatchResult('${match.id}', '${match.player2}')"` : '';
-        const cursorStyle = canClick ? 'cursor: pointer;' : 'cursor: default; opacity: 0.6;';
+        // Allow clicking if at least one player is determined (not TBD) and match isn't finished
+        // This enables progression when a match has one determined player and one TBD
+        const player1Determined = match.player1 !== 'TBD' && match.player1 !== null;
+        const player2Determined = match.player2 !== 'TBD' && match.player2 !== null && match.player2 !== 'BYE';
+        const canClickPlayer1 = player1Determined && !match.winner;
+        const canClickPlayer2 = player2Determined && !match.winner;
+        
+        const clickHandler1 = canClickPlayer1 ? `onclick="tournament.recordMatchResult('${match.id}', '${match.player1}')"` : '';
+        const clickHandler2 = canClickPlayer2 ? `onclick="tournament.recordMatchResult('${match.id}', '${match.player2}')"` : '';
+        const cursorStyle1 = canClickPlayer1 ? 'cursor: pointer;' : 'cursor: default; opacity: 0.6;';
+        const cursorStyle2 = canClickPlayer2 ? 'cursor: pointer;' : 'cursor: default; opacity: 0.6;';
         
         html += `
           <div class="bracket-match">
             <div class="bracket-player ${match.winner === match.player1 ? 'winner' : ''}" 
-                 ${clickHandler1} style="${cursorStyle}">
+                 ${clickHandler1} style="${cursorStyle1}">
               ${match.player1 || 'TBD'}
             </div>
             <div class="bracket-vs">vs</div>
             <div class="bracket-player ${match.winner === match.player2 ? 'winner' : ''}" 
-                 ${clickHandler2} style="${cursorStyle}">
+                 ${clickHandler2} style="${cursorStyle2}">
               ${match.player2 || 'TBD'}
             </div>
             ${roundIdx < rounds.length - 1 && this.isRoundComplete(round) ? '<div class="bracket-connector"></div>' : ''}
@@ -480,7 +487,7 @@ class Tournament {
         ${winner ? `
           <div class="tournament-winner">
             <div class="winner-crown">👑</div>
-            <h3>Winner: ${winner}</h3>
+            <h3>${this.currentTournament.bracket.type === 'round-robin' ? 'Current Leader' : 'Winner'}: ${winner}</h3>
           </div>
         ` : ''}
 
