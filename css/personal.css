@@ -802,54 +802,6 @@
   min-height: 120px;
 }
 
-/* Now Playing Section */
-.now-playing-section {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 16px;
-  margin-bottom: 24px;
-}
-
-.now-playing-title {
-  margin: 0 0 12px;
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--accent);
-}
-
-.now-playing-matches {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.now-playing-match {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 12px;
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 8px;
-  font-size: 14px;
-}
-
-.now-playing-bracket {
-  font-weight: 600;
-  color: var(--accent);
-  min-width: 70px;
-}
-
-.now-playing-round {
-  color: var(--muted);
-  min-width: 60px;
-}
-
-.now-playing-vs {
-  flex: 1;
-  color: var(--text);
-}
-
 /* Counter Styles */
 .counter-form {
   margin-bottom: 24px;
@@ -1754,28 +1706,4 @@
   .vs {
     transform: rotate(90deg);
   }
-}
-
-/* Power Rankings Drag and Drop */
-.power-rankings-list {
-  min-height: 100px;
-}
-
-.power-ranking-item {
-  transition: transform 0.2s ease, background 0.2s ease;
-}
-
-.power-ranking-item:hover {
-  background: rgba(255, 255, 255, 0.06) !important;
-  transform: translateX(4px);
-}
-
-.power-ranking-item.dragging {
-  opacity: 0.5;
-  cursor: grabbing;
-}
-
-.power-ranking-item.drag-over {
-  border-color: var(--accent) !important;
-  background: rgba(110, 231, 255, 0.1) !important;
 }
