@@ -84,13 +84,6 @@ class Tournament {
     if (checkbox && checkbox.checked) {
       this.updatePowerRankingsList();
     }
-    
-    // Show/hide consolation checkbox based on bracket type
-    const bracketType = document.getElementById('type');
-    const consolationSection = document.getElementById('consolation-section');
-    if (bracketType && consolationSection) {
-      consolationSection.style.display = bracketType.value === 'single-elimination' ? 'block' : 'none';
-    }
   }
 
   updatePowerRankingsList() {
@@ -262,17 +255,13 @@ class Tournament {
       }
     }
 
-    const tournamentType = formData.get('type');
-    const hasConsolation = tournamentType === 'single-elimination' && formData.get('enable-consolation') === 'true';
-    
     const tournament = {
       name: formData.get('name'),
-      type: tournamentType,
+      type: formData.get('type'),
       participants: participants,
-      bracket: this.generateBracket(participants, tournamentType, usePowerRankings, powerRankings, hasConsolation),
+      bracket: this.generateBracket(participants, formData.get('type'), usePowerRankings, powerRankings),
       powerRankings: powerRankings,
       usePowerRankings: usePowerRankings,
-      hasConsolation: hasConsolation,
       createdAt: new Date().toISOString()
     };
 
@@ -302,7 +291,7 @@ class Tournament {
     return rankings;
   }
 
-  generateBracket(participants, type, usePowerRankings = false, powerRankings = null, hasConsolation = false) {
+  generateBracket(participants, type, usePowerRankings = false, powerRankings = null) {
     // If using power rankings, generate teams first
     if (usePowerRankings && powerRankings) {
       const teams = this.generateTeamsFromPowerRankings(participants, powerRankings);
@@ -314,16 +303,10 @@ class Tournament {
     }
     
     if (type === 'single-elimination') {
-      const bracket = this.generateSingleElimination(participants);
-      // Add consolation flag but don't generate it yet (lazy generation)
-      if (hasConsolation) {
-        bracket.hasConsolation = true;
-      }
-      return bracket;
+      return this.generateSingleElimination(participants);
     } else if (type === 'round-robin') {
       return this.generateRoundRobin(participants);
     } else if (type === 'consolation') {
-      // Legacy support: old consolation tournaments still work
       return this.generateConsolationBracket(participants);
     } else {
       return this.generateDoubleElimination(participants);
@@ -403,60 +386,6 @@ class Tournament {
     const mainBracket = this.generateSingleElimination(participants);
     const consolation = this.generateConsolationMatches(participants.length);
     return { main: mainBracket, consolation, type: 'consolation' };
-  }
-
-  async enableConsolation() {
-    // Enable consolation bracket for an existing single elimination tournament
-    if (!this.currentTournament) return;
-    
-    // Don't enable if already has consolation or tournament is finished
-    if (this.currentTournament.bracket.consolation || this.getWinner()) {
-      this.showMessage('Consolation bracket already enabled or tournament is finished.', 'info');
-      return;
-    }
-    
-    // Check if it's a single elimination tournament
-    if (this.currentTournament.bracket.type !== 'single-elimination' && 
-        this.currentTournament.bracket.type !== 'consolation') {
-      this.showMessage('Consolation bracket can only be enabled for single elimination tournaments.', 'error');
-      return;
-    }
-    
-    // Generate consolation bracket
-    const numParticipants = this.currentTournament.participants.length;
-    const consolation = this.generateConsolationMatches(numParticipants);
-    
-    // Convert single elimination bracket structure to support consolation
-    if (this.currentTournament.bracket.type === 'single-elimination') {
-      // Convert to consolation structure
-      const mainBracket = {
-        rounds: this.currentTournament.bracket.rounds,
-        type: 'single-elimination'
-      };
-      this.currentTournament.bracket = {
-        main: mainBracket,
-        consolation: consolation,
-        type: 'consolation',
-        hasConsolation: true
-      };
-    } else if (this.currentTournament.bracket.type === 'consolation' && this.currentTournament.bracket.main) {
-      // Already has consolation structure but no consolation bracket yet, just add it
-      this.currentTournament.bracket.consolation = consolation;
-      this.currentTournament.bracket.hasConsolation = true;
-    }
-    
-    this.currentTournament.hasConsolation = true;
-    
-    // Save the tournament
-    try {
-      await api.updateTournament(this.currentTournament);
-      await this.loadTournaments();
-      this.render();
-      this.showMessage('Consolation bracket enabled!', 'success');
-    } catch (error) {
-      console.error('Error enabling consolation:', error);
-      this.showMessage('Error enabling consolation bracket.', 'error');
-    }
   }
 
   generateConsolationMatches(numParticipants) {
@@ -639,14 +568,7 @@ class Tournament {
   }
 
   async viewTournament(id) {
-    // Reload tournaments to ensure we have the latest data
-    await this.loadTournaments();
     this.currentTournament = this.tournaments.find(t => t.id === id);
-    if (!this.currentTournament) {
-      console.error('Tournament not found:', id);
-      this.showMessage('Tournament not found.', 'error');
-      return;
-    }
     this.viewMode = 'bracket';
     this.render();
   }
@@ -672,48 +594,19 @@ class Tournament {
                 this.advanceWinner(match, rounds);
                 // Loser is eliminated (no further advancement)
               }
-            } else if (bracketType === 'round-robin') {
-              // Round-robin - no advancement needed, just record the result
-              // Winner is already set, no further action needed
-            } else if (this.currentTournament.bracket.type === 'consolation' || (this.currentTournament.bracket.main && this.currentTournament.bracket.consolation)) {
-              // Bracket already has consolation structure
+            } else if (this.currentTournament.bracket.type === 'consolation') {
               if (bracketType === 'main') {
                 // Advance winner to next main bracket round
                 this.advanceWinner(match, rounds);
                 // Advance loser to consolation bracket
-                if (this.currentTournament.bracket.consolation && this.currentTournament.bracket.consolation.rounds) {
-                  this.advanceLoserToConsolation(match, this.currentTournament.bracket.main ? this.currentTournament.bracket.main.rounds : rounds, this.currentTournament.bracket.consolation.rounds);
-                }
+                this.advanceLoserToConsolation(match, this.currentTournament.bracket.main.rounds, this.currentTournament.bracket.consolation.rounds);
               } else if (bracketType === 'consolation') {
                 // Advance winner to next consolation bracket round
                 this.advanceWinner(match, rounds);
                 // Loser is eliminated
               }
-            } else if (this.currentTournament.hasConsolation && this.currentTournament.bracket.type === 'single-elimination') {
-              // Single elimination with consolation enabled but not yet generated
-              // Advance winner first
-              this.advanceWinner(match, rounds);
-              // Lazy generation: create consolation bracket when first loser occurs
-              const loser = winner === match.player1 ? match.player2 : match.player1;
-              if (loser && loser !== 'BYE' && loser !== 'TBD' && !this.currentTournament.bracket.consolation) {
-                const numParticipants = this.currentTournament.participants.length;
-                const consolation = this.generateConsolationMatches(numParticipants);
-                // Convert bracket structure
-                const mainBracket = {
-                  rounds: this.currentTournament.bracket.rounds,
-                  type: 'single-elimination'
-                };
-                this.currentTournament.bracket = {
-                  main: mainBracket,
-                  consolation: consolation,
-                  type: 'consolation',
-                  hasConsolation: true
-                };
-                // Advance loser to consolation bracket
-                this.advanceLoserToConsolation(match, this.currentTournament.bracket.main.rounds, this.currentTournament.bracket.consolation.rounds);
-              }
             } else {
-              // Single elimination without consolation - just advance winner
+              // Single elimination - just advance winner
               this.advanceWinner(match, rounds);
             }
             return true;
@@ -723,20 +616,10 @@ class Tournament {
       return false;
     };
 
-    // Handle round-robin tournaments first (they have a different structure)
-    if (this.currentTournament.bracket.type === 'round-robin') {
-      // Round-robin has rounds: [matches] where matches is a single array
-      if (this.currentTournament.bracket.rounds && this.currentTournament.bracket.rounds.length > 0) {
-        updateMatch(this.currentTournament.bracket.rounds, 'round-robin');
-      }
-    } else if (this.currentTournament.bracket.type === 'consolation' || (this.currentTournament.bracket.main && this.currentTournament.bracket.consolation)) {
+    if (this.currentTournament.bracket.type === 'consolation') {
       // Check main bracket
-      const mainRounds = this.currentTournament.bracket.main ? this.currentTournament.bracket.main.rounds : null;
-      let found = false;
-      if (mainRounds) {
-        found = updateMatch(mainRounds, 'main');
-      }
-      if (!found && this.currentTournament.bracket.consolation && this.currentTournament.bracket.consolation.rounds) {
+      let found = updateMatch(this.currentTournament.bracket.main.rounds, 'main');
+      if (!found) {
         // Check consolation bracket
         updateMatch(this.currentTournament.bracket.consolation.rounds, 'consolation');
       }
@@ -792,15 +675,10 @@ class Tournament {
         // Check losers bracket
         updateMatch(this.currentTournament.bracket.losers.rounds, 'losers');
       }
-    } else if (this.currentTournament.bracket.winners && this.currentTournament.bracket.winners.rounds) {
-      // Has winners bracket structure (for double elimination or other formats)
+    } else if (this.currentTournament.bracket.winners) {
       updateMatch(this.currentTournament.bracket.winners.rounds, 'winners');
-    } else if (this.currentTournament.bracket.rounds) {
-      // Standard single elimination or other formats with rounds array
-      updateMatch(this.currentTournament.bracket.rounds, 'single');
     } else {
-      console.error('Unknown bracket structure:', this.currentTournament.bracket);
-      this.showMessage('Error: Unknown bracket structure.', 'error');
+      updateMatch(this.currentTournament.bracket.rounds, 'single');
     }
 
     try {
@@ -913,8 +791,6 @@ class Tournament {
     const loser = match.winner === match.player1 ? match.player2 : match.player1;
     if (!loser || loser === 'BYE' || loser === 'TBD') return;
 
-    if (!consolationRounds || consolationRounds.length === 0) return;
-
     const mainRound = match.round;
     
     // Losers from main bracket round N go to consolation bracket round N
@@ -999,16 +875,11 @@ class Tournament {
           }
         });
       }
-    } else if (this.currentTournament.bracket.type === 'consolation' || (this.currentTournament.bracket.main && this.currentTournament.bracket.consolation)) {
+    } else if (this.currentTournament.bracket.type === 'consolation') {
       // Process main bracket
-      const mainRounds = this.currentTournament.bracket.main ? this.currentTournament.bracket.main.rounds : this.currentTournament.bracket.rounds;
-      if (mainRounds) {
-        processMatches(mainRounds);
-      }
-      // Process consolation bracket if it exists
-      if (this.currentTournament.bracket.consolation && this.currentTournament.bracket.consolation.rounds) {
-        processMatches(this.currentTournament.bracket.consolation.rounds);
-      }
+      processMatches(this.currentTournament.bracket.main.rounds);
+      // Process consolation bracket
+      processMatches(this.currentTournament.bracket.consolation.rounds);
     } else if (this.currentTournament.bracket.winners) {
       processMatches(this.currentTournament.bracket.winners.rounds);
     } else {
@@ -1057,16 +928,11 @@ class Tournament {
           if (match.winner) completed++;
         });
       }
-    } else if (this.currentTournament.bracket.type === 'consolation' || (this.currentTournament.bracket.main && this.currentTournament.bracket.consolation)) {
+    } else if (this.currentTournament.bracket.type === 'consolation') {
       // Process main bracket
-      const mainRounds = this.currentTournament.bracket.main ? this.currentTournament.bracket.main.rounds : this.currentTournament.bracket.rounds;
-      if (mainRounds) {
-        processMatches(mainRounds);
-      }
-      // Process consolation bracket if it exists
-      if (this.currentTournament.bracket.consolation && this.currentTournament.bracket.consolation.rounds) {
-        processMatches(this.currentTournament.bracket.consolation.rounds);
-      }
+      processMatches(this.currentTournament.bracket.main.rounds);
+      // Process consolation bracket
+      processMatches(this.currentTournament.bracket.consolation.rounds);
     } else if (this.currentTournament.bracket.winners) {
       processMatches(this.currentTournament.bracket.winners.rounds);
     } else {
@@ -1305,49 +1171,45 @@ class Tournament {
           });
         }
       }
-    } else if (this.currentTournament.bracket.type === 'consolation' || (this.currentTournament.bracket.main && this.currentTournament.bracket.consolation)) {
+    } else if (this.currentTournament.bracket.type === 'consolation') {
       // Check main bracket
-      const mainRounds = this.currentTournament.bracket.main ? this.currentTournament.bracket.main.rounds : this.currentTournament.bracket.rounds;
-      if (mainRounds) {
-        for (let i = 0; i < mainRounds.length; i++) {
-          const round = mainRounds[i];
-          const isFirstRound = i === 0;
-          const prevRoundComplete = i === 0 || this.isRoundComplete(mainRounds[i - 1]);
-          
-          if (isFirstRound || prevRoundComplete) {
-            round.forEach(match => {
-              if (!match.winner && match.player1 !== 'TBD' && match.player2 !== 'TBD' && match.player2 !== 'BYE') {
-                nowPlaying.push({
-                  bracket: 'Main',
-                  round: i === mainRounds.length - 1 ? 'Final' : i === mainRounds.length - 2 ? 'Semifinal' : `Round ${i + 1}`,
-                  match: `${match.player1} vs ${match.player2}`
-                });
-              }
-            });
-          }
+      const mainRounds = this.currentTournament.bracket.main.rounds;
+      for (let i = 0; i < mainRounds.length; i++) {
+        const round = mainRounds[i];
+        const isFirstRound = i === 0;
+        const prevRoundComplete = i === 0 || this.isRoundComplete(mainRounds[i - 1]);
+        
+        if (isFirstRound || prevRoundComplete) {
+          round.forEach(match => {
+            if (!match.winner && match.player1 !== 'TBD' && match.player2 !== 'TBD' && match.player2 !== 'BYE') {
+              nowPlaying.push({
+                bracket: 'Main',
+                round: i === mainRounds.length - 1 ? 'Final' : i === mainRounds.length - 2 ? 'Semifinal' : `Round ${i + 1}`,
+                match: `${match.player1} vs ${match.player2}`
+              });
+            }
+          });
         }
       }
       
-      // Check consolation bracket if it exists
-      if (this.currentTournament.bracket.consolation && this.currentTournament.bracket.consolation.rounds) {
-        const consolationRounds = this.currentTournament.bracket.consolation.rounds;
-        for (let i = 0; i < consolationRounds.length; i++) {
-          const round = consolationRounds[i];
-          const isFirstRound = i === 0;
-          const prevRoundComplete = i === 0 || this.isRoundComplete(consolationRounds[i - 1]);
-          
-          if (isFirstRound || prevRoundComplete) {
-            round.forEach(match => {
-              if (!match.winner && match.player1 !== 'TBD' && match.player2 !== 'TBD' && match.player2 !== 'BYE') {
-                const placeLabel = match.place || `Consolation Round ${i + 1}`;
-                nowPlaying.push({
-                  bracket: 'Consolation',
-                  round: placeLabel,
-                  match: `${match.player1} vs ${match.player2}`
-                });
-              }
-            });
-          }
+      // Check consolation bracket
+      const consolationRounds = this.currentTournament.bracket.consolation.rounds;
+      for (let i = 0; i < consolationRounds.length; i++) {
+        const round = consolationRounds[i];
+        const isFirstRound = i === 0;
+        const prevRoundComplete = i === 0 || this.isRoundComplete(consolationRounds[i - 1]);
+        
+        if (isFirstRound || prevRoundComplete) {
+          round.forEach(match => {
+            if (!match.winner && match.player1 !== 'TBD' && match.player2 !== 'TBD' && match.player2 !== 'BYE') {
+              const placeLabel = match.place || `Consolation Round ${i + 1}`;
+              nowPlaying.push({
+                bracket: 'Consolation',
+                round: placeLabel,
+                match: `${match.player1} vs ${match.player2}`
+              });
+            }
+          });
         }
       }
     } else {
@@ -1418,7 +1280,7 @@ class Tournament {
       return this.renderDoubleEliminationBracket(bracket);
     }
 
-    if (bracket.type === 'consolation' || (bracket.main && bracket.consolation)) {
+    if (bracket.type === 'consolation') {
       return this.renderConsolationBracket(bracket);
     }
 
@@ -1426,29 +1288,21 @@ class Tournament {
   }
 
   renderConsolationBracket(bracket) {
-    if (!bracket) return '';
-    
-    // Handle both old format (bracket.main) and new format (bracket.rounds with main property)
-    const mainBracket = bracket.main || (bracket.rounds ? { rounds: bracket.rounds, type: bracket.type } : null);
-    const consolation = bracket.consolation;
-    
-    if (!mainBracket) return '';
+    if (!bracket || !bracket.main || !bracket.consolation) return '';
     
     let html = '<div class="consolation-bracket-container">';
     
     // Render Main Bracket
     html += '<div class="bracket-section">';
     html += '<h3 class="bracket-section-title">Main Bracket</h3>';
-    html += this.renderVisualBracket(mainBracket, false, null);
+    html += this.renderVisualBracket(bracket.main, false, null);
     html += '</div>';
     
-    // Render Consolation Bracket if it exists
-    if (consolation && consolation.rounds) {
-      html += '<div class="bracket-section">';
-      html += '<h3 class="bracket-section-title">Consolation Bracket</h3>';
-      html += this.renderConsolationBracketVisual(consolation);
-      html += '</div>';
-    }
+    // Render Consolation Bracket
+    html += '<div class="bracket-section">';
+    html += '<h3 class="bracket-section-title">Consolation Bracket</h3>';
+    html += this.renderConsolationBracketVisual(bracket.consolation);
+    html += '</div>';
     
     html += '</div>';
     return html;
@@ -1712,24 +1566,6 @@ class Tournament {
           </div>
         ` : `
           <div class="bracket-container">
-            ${(this.currentTournament.bracket.type === 'single-elimination' && 
-                this.currentTournament.hasConsolation && 
-                !this.currentTournament.bracket.consolation && 
-                !this.getWinner()) ? `
-              <div style="margin-bottom: 20px; padding: 16px; background: rgba(255,255,255,.05); border-radius: 12px; border: 1px solid rgba(255,255,255,.1);">
-                <p style="margin: 0 0 12px; color: var(--muted);">Consolation bracket is enabled but will be created when the first match is played.</p>
-                <button class="btn primary" onclick="tournament.enableConsolation()">Generate Consolation Bracket Now</button>
-              </div>
-            ` : ''}
-            ${(this.currentTournament.bracket.type === 'single-elimination' && 
-                !this.currentTournament.hasConsolation && 
-                !this.currentTournament.bracket.consolation && 
-                !this.getWinner()) ? `
-              <div style="margin-bottom: 20px; padding: 16px; background: rgba(255,255,255,.05); border-radius: 12px; border: 1px solid rgba(255,255,255,.1);">
-                <p style="margin: 0 0 12px; color: var(--muted);">Add consolation matches for losers to compete for 3rd place, 5th place, etc.</p>
-                <button class="btn primary" onclick="tournament.enableConsolation()">Enable Consolation Bracket</button>
-              </div>
-            ` : ''}
             ${this.renderBracket(this.currentTournament.bracket)}
           </div>
         `}
@@ -1753,16 +1589,8 @@ class Tournament {
               <option value="single-elimination">Single Elimination</option>
               <option value="double-elimination">Double Elimination</option>
               <option value="round-robin">Round Robin</option>
+              <option value="consolation">Consolation Bracket</option>
             </select>
-          </div>
-          <div id="consolation-section" class="form-group" style="display: none;">
-            <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
-              <input type="checkbox" id="enable-consolation" name="enable-consolation" value="true" style="width: auto; margin: 0;">
-              <span>Enable Consolation Bracket</span>
-            </label>
-            <p style="color: var(--muted); font-size: 13px; margin-top: 6px; margin-left: 28px;">
-              Losers from each round will play consolation matches for 3rd place, 5th place, etc.
-            </p>
           </div>
           <div class="form-group">
             <label for="participants">Add Participants</label>
@@ -1818,10 +1646,7 @@ class Tournament {
                       <span class="tournament-meta">${t.type} • ${t.participants.length} participants</span>
                       ${total > 0 ? `<div class="tournament-progress-bar"><div class="tournament-progress-fill" style="width: ${percentage}%"></div></div>` : ''}
                     </div>
-                    <div style="display: flex; gap: 8px; align-items: center;">
-                      <button class="btn" onclick="tournament.viewTournament('${t.id}')">View</button>
-                      <button class="btn-icon" onclick="tournament.deleteTournament('${t.id}')" title="Delete tournament" style="color: var(--danger);">×</button>
-                    </div>
+                    <button class="btn" onclick="tournament.viewTournament('${t.id}')">View</button>
                   </div>
                 `;
               }).join('')
@@ -1830,8 +1655,6 @@ class Tournament {
       `;
 
       this.setupEventListeners();
-      // Initialize consolation section visibility
-      this.handleBracketTypeChange();
     }
   }
 }
