@@ -51,12 +51,15 @@ class API {
         if (key === 'habits') {
           return Promise.resolve({ habits: [], entries: [] });
         }
+        if (key === 'timer_settings' || key === 'timer_goals') {
+          return Promise.resolve(null);
+        }
         return Promise.resolve([]);
       }
       return Promise.resolve(JSON.parse(data));
     } else if (method === 'POST') {
-      // Special handling for counters and habits (stores object, not array)
-      if (key === 'counters' || key === 'habits') {
+      // Special handling for counters, habits, and settings (stores object, not array)
+      if (key === 'counters' || key === 'habits' || key === 'timer_settings' || key === 'timer_goals') {
         localStorage.setItem(key, JSON.stringify(options.body));
         return Promise.resolve(options.body);
       }
@@ -71,8 +74,8 @@ class API {
       localStorage.setItem(key, JSON.stringify(existing));
       return Promise.resolve(newItem);
     } else if (method === 'PUT') {
-      // Special handling for counters and habits
-      if (key === 'counters' || key === 'habits') {
+      // Special handling for counters, habits, and settings
+      if (key === 'counters' || key === 'habits' || key === 'timer_settings' || key === 'timer_goals') {
         localStorage.setItem(key, JSON.stringify(options.body));
         return Promise.resolve(options.body);
       }
@@ -235,6 +238,56 @@ class API {
     return this.request('/api/tasks', {
       method: 'DELETE',
       body: { id }
+    });
+  }
+
+  // Productivity Timer API methods
+  async getSessions() {
+    return this.request('/api/timer-sessions', { method: 'GET' });
+  }
+
+  async createSession(session) {
+    return this.request('/api/timer-sessions', {
+      method: 'POST',
+      body: session
+    });
+  }
+
+  async updateSession(session) {
+    return this.request('/api/timer-sessions', {
+      method: 'PUT',
+      body: session
+    });
+  }
+
+  async deleteSession(id) {
+    return this.request('/api/timer-sessions', {
+      method: 'DELETE',
+      body: { id }
+    });
+  }
+
+  async getTimerSettings() {
+    const data = await this.request('/api/timer-settings', { method: 'GET' });
+    return data || null;
+  }
+
+  async saveTimerSettings(settings) {
+    return this.request('/api/timer-settings', {
+      method: 'POST',
+      body: settings
+    });
+  }
+
+  async getTimerGoals() {
+    const data = await this.request('/api/timer-goals', { method: 'GET' });
+    return data || null;
+  }
+
+  async saveTimerGoals(goals) {
+    return this.request('/api/timer-goals', {
+      method: 'POST',
+      body: goals
     });
   }
 }
