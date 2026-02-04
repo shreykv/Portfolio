@@ -51,7 +51,7 @@ If you already have a repository, skip to Step 4.
 
 ```powershell
 # Add GitHub remote (replace YOUR_USERNAME with your actual GitHub username)
-git remote add origin https://github.com/YOUR_USERNAME/shreykv.github.io.git
+git remote add origin https://github.com/shreykv/shreykv.github.io.git
 
 # Push to GitHub
 git branch -M main

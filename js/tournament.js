@@ -4,6 +4,15 @@ class Tournament {
     this.tournaments = [];
     this.currentTournament = null;
     this.viewMode = 'bracket'; // 'bracket' or 'stats'
+    
+    // Power rankings state (for tournament creation)
+    this.powerRankings = {
+      offense: [],
+      defense: []
+    };
+    this.draggedItem = null;
+    this.draggedList = null;
+    
     this.init();
   }
 
@@ -39,6 +48,76 @@ class Tournament {
         }
       });
     }
+
+    // Seeding mode change listener
+    const seedingModeSelect = document.getElementById('seeding-mode');
+    if (seedingModeSelect) {
+      seedingModeSelect.addEventListener('change', (e) => this.handleSeedingModeChange(e));
+    }
+
+    // Game mode change listener
+    const gameModeSelect = document.getElementById('game-mode');
+    if (gameModeSelect) {
+      gameModeSelect.addEventListener('change', (e) => this.handleGameModeChange(e));
+    }
+  }
+
+  handleSeedingModeChange(e) {
+    const seedingMode = e.target.value;
+    const rankingsContainer = document.getElementById('power-rankings-container');
+    const teamsPreview = document.getElementById('teams-preview');
+    
+    if (seedingMode === 'ranked') {
+      // Initialize rankings with current participants
+      const participants = this.getParticipants();
+      this.powerRankings.offense = [...participants];
+      this.powerRankings.defense = [...participants];
+      
+      if (rankingsContainer) {
+        rankingsContainer.style.display = 'block';
+        this.renderPowerRankings();
+      }
+    } else {
+      if (rankingsContainer) {
+        rankingsContainer.style.display = 'none';
+      }
+    }
+    
+    // Update teams preview if in doubles mode
+    this.updateTeamsPreview();
+  }
+
+  handleGameModeChange(e) {
+    this.updateTeamsPreview();
+  }
+
+  updateTeamsPreview() {
+    const teamsPreview = document.getElementById('teams-preview');
+    const gameModeSelect = document.getElementById('game-mode');
+    const seedingModeSelect = document.getElementById('seeding-mode');
+    
+    if (!teamsPreview || !gameModeSelect || !seedingModeSelect) return;
+    
+    const isDoubles = gameModeSelect.value === 'doubles';
+    const isRanked = seedingModeSelect.value === 'ranked';
+    
+    if (isDoubles) {
+      teamsPreview.style.display = 'block';
+      
+      if (isRanked) {
+        // Generate teams based on power rankings
+        const teams = this.generateDoublesPairs();
+        this.renderTeamsPreview(teams);
+      } else {
+        // Show message that teams will be randomly paired
+        teamsPreview.innerHTML = `
+          <h4>Teams Preview</h4>
+          <p class="teams-preview-note">Teams will be randomly paired when tournament is created.</p>
+        `;
+      }
+    } else {
+      teamsPreview.style.display = 'none';
+    }
   }
 
   addParticipant() {
@@ -52,16 +131,313 @@ class Tournament {
       item.className = 'participant-item';
       item.innerHTML = `
         <span>${name}</span>
-        <button type="button" class="btn-icon" onclick="this.parentElement.remove()">×</button>
+        <button type="button" class="btn-icon" onclick="tournament.removeParticipant(this)">×</button>
       `;
       list.appendChild(item);
       input.value = '';
+      
+      // Update power rankings if in ranked mode
+      this.syncPowerRankingsWithParticipants();
     }
+  }
+
+  removeParticipant(button) {
+    const item = button.parentElement;
+    const name = item.querySelector('span').textContent.trim();
+    item.remove();
+    
+    // Remove from power rankings
+    this.powerRankings.offense = this.powerRankings.offense.filter(p => p !== name);
+    this.powerRankings.defense = this.powerRankings.defense.filter(p => p !== name);
+    
+    // Re-render if in ranked mode
+    const seedingModeSelect = document.getElementById('seeding-mode');
+    if (seedingModeSelect && seedingModeSelect.value === 'ranked') {
+      this.renderPowerRankings();
+    }
+    this.updateTeamsPreview();
+  }
+
+  syncPowerRankingsWithParticipants() {
+    const participants = this.getParticipants();
+    const seedingModeSelect = document.getElementById('seeding-mode');
+    
+    // Add new participants to the end of rankings
+    participants.forEach(p => {
+      if (!this.powerRankings.offense.includes(p)) {
+        this.powerRankings.offense.push(p);
+      }
+      if (!this.powerRankings.defense.includes(p)) {
+        this.powerRankings.defense.push(p);
+      }
+    });
+    
+    // Remove participants no longer in the list
+    this.powerRankings.offense = this.powerRankings.offense.filter(p => participants.includes(p));
+    this.powerRankings.defense = this.powerRankings.defense.filter(p => participants.includes(p));
+    
+    // Re-render if in ranked mode
+    if (seedingModeSelect && seedingModeSelect.value === 'ranked') {
+      this.renderPowerRankings();
+    }
+    this.updateTeamsPreview();
   }
 
   getParticipants() {
     const items = document.querySelectorAll('.participant-item span');
     return Array.from(items).map(item => item.textContent.trim());
+  }
+
+  // Power Rankings Methods
+  renderPowerRankings() {
+    const container = document.getElementById('power-rankings-lists');
+    if (!container) return;
+
+    const participants = this.getParticipants();
+    if (participants.length === 0) {
+      container.innerHTML = '<p class="empty-state">Add participants first to set rankings.</p>';
+      return;
+    }
+
+    const offenseHtml = this.renderRankingList('offense', this.powerRankings.offense);
+    const defenseHtml = this.renderRankingList('defense', this.powerRankings.defense);
+    const combinedHtml = this.renderCombinedScores();
+
+    container.innerHTML = `
+      <div class="rankings-grid">
+        <div class="ranking-column">
+          <h4 class="ranking-title">Offense Ranking</h4>
+          <div class="ranking-list" id="offense-ranking" data-list="offense">
+            ${offenseHtml}
+          </div>
+        </div>
+        <div class="ranking-column">
+          <h4 class="ranking-title">Defense Ranking</h4>
+          <div class="ranking-list" id="defense-ranking" data-list="defense">
+            ${defenseHtml}
+          </div>
+        </div>
+      </div>
+      <div class="combined-scores">
+        <h4 class="ranking-title">Combined Scores & Seeds</h4>
+        ${combinedHtml}
+      </div>
+    `;
+
+    // Setup drag-drop listeners
+    this.setupDragDropListeners();
+  }
+
+  renderRankingList(listType, players) {
+    const numPlayers = players.length;
+    return players.map((player, idx) => {
+      const points = numPlayers - idx; // Rank 1 gets N points, Rank N gets 1 point
+      return `
+        <div class="ranking-item" draggable="true" data-player="${player}" data-index="${idx}">
+          <span class="ranking-position">${idx + 1}</span>
+          <span class="ranking-drag-handle">≡</span>
+          <span class="ranking-player-name">${player}</span>
+          <span class="ranking-points">${points} pts</span>
+        </div>
+      `;
+    }).join('');
+  }
+
+  calculateCombinedScores() {
+    const participants = this.getParticipants();
+    const numPlayers = participants.length;
+    const scores = {};
+
+    participants.forEach(player => {
+      const offenseRank = this.powerRankings.offense.indexOf(player);
+      const defenseRank = this.powerRankings.defense.indexOf(player);
+      
+      // Points: Rank 1 = N points, Rank 2 = N-1 points, etc.
+      const offensePoints = offenseRank >= 0 ? numPlayers - offenseRank : 0;
+      const defensePoints = defenseRank >= 0 ? numPlayers - defenseRank : 0;
+      
+      scores[player] = {
+        offense: offensePoints,
+        defense: defensePoints,
+        total: offensePoints + defensePoints,
+        offenseRank: offenseRank + 1,
+        defenseRank: defenseRank + 1
+      };
+    });
+
+    // Sort by total score descending
+    return Object.entries(scores)
+      .map(([player, data]) => ({ player, ...data }))
+      .sort((a, b) => b.total - a.total);
+  }
+
+  renderCombinedScores() {
+    const scores = this.calculateCombinedScores();
+    
+    if (scores.length === 0) {
+      return '<p class="empty-state">No participants to score.</p>';
+    }
+
+    return `
+      <div class="combined-scores-list">
+        ${scores.map((score, idx) => `
+          <div class="combined-score-item ${idx === 0 ? 'top-seed' : ''}">
+            <span class="seed-number">Seed ${idx + 1}</span>
+            <span class="score-player">${score.player}</span>
+            <span class="score-breakdown">
+              <span class="offense-score" title="Offense: Rank ${score.offenseRank}">O: ${score.offense}</span>
+              <span class="defense-score" title="Defense: Rank ${score.defenseRank}">D: ${score.defense}</span>
+            </span>
+            <span class="total-score">${score.total} pts</span>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  setupDragDropListeners() {
+    const lists = document.querySelectorAll('.ranking-list');
+    
+    lists.forEach(list => {
+      const items = list.querySelectorAll('.ranking-item');
+      
+      items.forEach(item => {
+        item.addEventListener('dragstart', (e) => this.handleDragStart(e));
+        item.addEventListener('dragend', (e) => this.handleDragEnd(e));
+        item.addEventListener('dragover', (e) => this.handleDragOver(e));
+        item.addEventListener('drop', (e) => this.handleDrop(e));
+        item.addEventListener('dragenter', (e) => this.handleDragEnter(e));
+        item.addEventListener('dragleave', (e) => this.handleDragLeave(e));
+      });
+    });
+  }
+
+  handleDragStart(e) {
+    this.draggedItem = e.target;
+    this.draggedList = e.target.closest('.ranking-list').dataset.list;
+    e.target.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', e.target.dataset.player);
+  }
+
+  handleDragEnd(e) {
+    e.target.classList.remove('dragging');
+    document.querySelectorAll('.ranking-item').forEach(item => {
+      item.classList.remove('drag-over');
+    });
+    this.draggedItem = null;
+    this.draggedList = null;
+  }
+
+  handleDragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  }
+
+  handleDragEnter(e) {
+    e.preventDefault();
+    const target = e.target.closest('.ranking-item');
+    if (target && target !== this.draggedItem) {
+      target.classList.add('drag-over');
+    }
+  }
+
+  handleDragLeave(e) {
+    const target = e.target.closest('.ranking-item');
+    if (target) {
+      target.classList.remove('drag-over');
+    }
+  }
+
+  handleDrop(e) {
+    e.preventDefault();
+    const target = e.target.closest('.ranking-item');
+    if (!target || !this.draggedItem || target === this.draggedItem) return;
+
+    const targetList = target.closest('.ranking-list').dataset.list;
+    
+    // Only allow dropping within the same list
+    if (targetList !== this.draggedList) return;
+
+    const draggedPlayer = this.draggedItem.dataset.player;
+    const targetPlayer = target.dataset.player;
+    
+    // Get the ranking array
+    const rankings = this.powerRankings[targetList];
+    const draggedIdx = rankings.indexOf(draggedPlayer);
+    const targetIdx = rankings.indexOf(targetPlayer);
+
+    // Remove dragged item and insert at target position
+    rankings.splice(draggedIdx, 1);
+    rankings.splice(targetIdx, 0, draggedPlayer);
+
+    // Re-render
+    this.renderPowerRankings();
+    this.updateTeamsPreview();
+  }
+
+  // Doubles Pairing Methods
+  generateDoublesPairs() {
+    const scores = this.calculateCombinedScores();
+    const teams = [];
+    
+    if (scores.length < 2) return teams;
+    
+    // Pair best with worst, second best with second worst, etc.
+    const numTeams = Math.floor(scores.length / 2);
+    
+    for (let i = 0; i < numTeams; i++) {
+      const bestPlayer = scores[i];
+      const worstPlayer = scores[scores.length - 1 - i];
+      
+      teams.push({
+        name: `Team ${i + 1}`,
+        players: [bestPlayer.player, worstPlayer.player],
+        combinedScore: bestPlayer.total + worstPlayer.total
+      });
+    }
+    
+    // Handle odd number of players - last player gets a bye or solo team
+    if (scores.length % 2 === 1) {
+      const middlePlayer = scores[Math.floor(scores.length / 2)];
+      teams.push({
+        name: `Team ${numTeams + 1}`,
+        players: [middlePlayer.player],
+        combinedScore: middlePlayer.total,
+        isSolo: true
+      });
+    }
+    
+    return teams;
+  }
+
+  renderTeamsPreview(teams) {
+    const container = document.getElementById('teams-preview');
+    if (!container) return;
+
+    if (teams.length === 0) {
+      container.innerHTML = `
+        <h4>Teams Preview</h4>
+        <p class="empty-state">Add at least 2 participants to form teams.</p>
+      `;
+      return;
+    }
+
+    container.innerHTML = `
+      <h4>Teams Preview</h4>
+      <p class="teams-preview-note">Best player paired with worst player for balanced teams.</p>
+      <div class="teams-grid">
+        ${teams.map(team => `
+          <div class="team-card ${team.isSolo ? 'solo-team' : ''}">
+            <div class="team-name">${team.name}</div>
+            <div class="team-players">
+              ${team.players.map(p => `<span class="team-player">${p}</span>`).join(' & ')}
+            </div>
+            <div class="team-score">Combined: ${team.combinedScore} pts</div>
+          </div>
+        `).join('')}
+      </div>
+    `;
   }
 
   async handleCreateTournament(e) {
@@ -70,22 +446,76 @@ class Tournament {
     const formData = new FormData(form);
 
     const participants = this.getParticipants();
-    if (participants.length < 2) {
-      alert('Please add at least 2 participants');
+    const seedingMode = formData.get('seeding-mode') || 'random';
+    const gameMode = formData.get('game-mode') || 'singles';
+
+    // Validate participant count
+    const minParticipants = gameMode === 'doubles' ? 4 : 2;
+    if (participants.length < minParticipants) {
+      alert(`Please add at least ${minParticipants} participants for ${gameMode} mode`);
       return;
+    }
+
+    // For doubles, validate even number of players (or handle odd)
+    if (gameMode === 'doubles' && participants.length % 2 !== 0) {
+      if (!confirm('Odd number of players. One team will have only 1 player. Continue?')) {
+        return;
+      }
+    }
+
+    // Determine final participants (teams for doubles, players for singles)
+    let finalParticipants;
+    let teams = null;
+    let powerRankingsData = null;
+
+    if (gameMode === 'doubles') {
+      if (seedingMode === 'ranked') {
+        teams = this.generateDoublesPairs();
+        finalParticipants = teams.map(t => t.players.join(' & '));
+        powerRankingsData = { ...this.powerRankings };
+      } else {
+        // Random pairing for doubles
+        const shuffled = [...participants].sort(() => Math.random() - 0.5);
+        teams = [];
+        for (let i = 0; i < shuffled.length; i += 2) {
+          const teamPlayers = [shuffled[i]];
+          if (shuffled[i + 1]) teamPlayers.push(shuffled[i + 1]);
+          teams.push({
+            name: `Team ${teams.length + 1}`,
+            players: teamPlayers,
+            isSolo: teamPlayers.length === 1
+          });
+        }
+        finalParticipants = teams.map(t => t.players.join(' & '));
+      }
+    } else {
+      // Singles mode
+      if (seedingMode === 'ranked') {
+        powerRankingsData = { ...this.powerRankings };
+      }
+      finalParticipants = participants;
     }
 
     const tournament = {
       name: formData.get('name'),
       type: formData.get('type'),
+      seedingMode: seedingMode,
+      gameMode: gameMode,
       participants: participants,
-      bracket: this.generateBracket(participants, formData.get('type')),
+      finalParticipants: finalParticipants,
+      teams: teams,
+      powerRankings: powerRankingsData,
+      bracket: this.generateBracket(finalParticipants, formData.get('type'), seedingMode, powerRankingsData),
       createdAt: new Date().toISOString()
     };
 
     try {
       const created = await api.createTournament(tournament);
       await this.loadTournaments();
+      
+      // Reset power rankings state
+      this.powerRankings = { offense: [], defense: [] };
+      
       this.viewTournament(created.id);
       this.showMessage('Tournament created!', 'success');
     } catch (error) {
@@ -94,17 +524,57 @@ class Tournament {
     }
   }
 
-  generateBracket(participants, type) {
-    // Shuffle participants
-    const shuffled = [...participants].sort(() => Math.random() - 0.5);
+  generateBracket(participants, type, seedingMode = 'random', powerRankings = null) {
+    let orderedParticipants;
+    
+    if (seedingMode === 'ranked' && powerRankings) {
+      // Order by combined scores for balanced matchups
+      orderedParticipants = this.getBalancedMatchupOrder(participants, powerRankings);
+    } else {
+      // Random shuffle
+      orderedParticipants = [...participants].sort(() => Math.random() - 0.5);
+    }
     
     if (type === 'single-elimination') {
-      return this.generateSingleElimination(shuffled);
+      return this.generateSingleElimination(orderedParticipants);
     } else if (type === 'round-robin') {
-      return this.generateRoundRobin(shuffled);
+      return this.generateRoundRobin(orderedParticipants);
     } else {
-      return this.generateDoubleElimination(shuffled);
+      return this.generateDoubleElimination(orderedParticipants);
     }
+  }
+
+  // Get participant order that minimizes power difference in matchups
+  getBalancedMatchupOrder(participants, powerRankings) {
+    // Calculate scores for each participant
+    const numPlayers = powerRankings.offense.length;
+    const scores = {};
+    
+    participants.forEach(p => {
+      // For team names like "Player A & Player B", calculate combined team score
+      const playerNames = p.split(' & ');
+      let totalScore = 0;
+      
+      playerNames.forEach(name => {
+        const offenseRank = powerRankings.offense.indexOf(name);
+        const defenseRank = powerRankings.defense.indexOf(name);
+        const offensePoints = offenseRank >= 0 ? numPlayers - offenseRank : 0;
+        const defensePoints = defenseRank >= 0 ? numPlayers - defenseRank : 0;
+        totalScore += offensePoints + defensePoints;
+      });
+      
+      scores[p] = totalScore;
+    });
+
+    // Sort by score descending
+    const sorted = [...participants].sort((a, b) => scores[b] - scores[a]);
+    
+    // Arrange for balanced matchups: pair adjacent seeds
+    // For 8 players sorted [1,2,3,4,5,6,7,8] by strength:
+    // We want matchups: 1v2, 3v4, 5v6, 7v8 (minimizing power difference)
+    // So the order should be: [1,2,3,4,5,6,7,8] (already sorted)
+    
+    return sorted;
   }
 
   generateSingleElimination(participants) {
@@ -178,12 +648,21 @@ class Tournament {
     const rounds = [];
     const numWinnersRounds = Math.ceil(Math.log2(numParticipants));
     
-    // Losers bracket structure is more complex
-    // First round: Losers from winners bracket round 1
-    // Subsequent rounds: Mix of losers from winners bracket and winners from losers bracket
+    // Losers bracket structure for double elimination:
+    // - LR0: Losers from WR0 play each other (numMatches = WR0_matches / 2)
+    // - For each winners bracket round wRound (1 to numWinnersRounds-1):
+    //   - "Major" round: LR winners play against WR losers (numMatches = numLosersFromWR)
+    //   - "Minor" round: LR winners play each other (numMatches = previous / 2) - only if not last
+    //
+    // Example for 8 players (numWinnersRounds = 3):
+    // - LR0: 2 matches (4 losers from WR0 paired up)
+    // - LR1: 2 matches (2 LR0 winners vs 2 WR1 losers) - "major" round
+    // - LR2: 1 match (2 LR1 winners play each other) - "minor" round  
+    // - LR3: 1 match (1 LR2 winner vs 1 WR2 loser) - "major" round (losers finals)
     
-    // Calculate number of matches in first losers round (losers from winners round 1)
-    const firstLosersRoundMatches = Math.ceil(numParticipants / 4); // Half of winners round 1 matches
+    // Calculate number of matches in first losers round (losers from winners round 0)
+    // Winners round 0 has numParticipants/2 matches, so losers round 0 has numParticipants/4 matches
+    const firstLosersRoundMatches = Math.ceil(numParticipants / 4);
     const firstRound = [];
     for (let i = 0; i < firstLosersRoundMatches; i++) {
       firstRound.push({
@@ -199,14 +678,17 @@ class Tournament {
     rounds.push(firstRound);
 
     // Generate subsequent losers bracket rounds
-    // The structure alternates between receiving from winners bracket and from previous losers round
     let currentRoundSize = firstLosersRoundMatches;
     let roundNum = 1;
     
-    // For each winners bracket round (after round 1), there will be corresponding losers bracket rounds
+    // For each winners bracket round (1 to numWinnersRounds-1), create corresponding losers bracket rounds
     for (let wRound = 1; wRound < numWinnersRounds; wRound++) {
-      // Round that receives losers from current winners bracket round
-      const numMatches = Math.ceil(currentRoundSize / 2);
+      // Calculate how many losers will come from this winners bracket round
+      const numLosersFromWinners = Math.ceil(Math.pow(2, numWinnersRounds - wRound - 1));
+      
+      // "Major" round: Each WB loser plays against a LB winner from previous round
+      // numMatches = numLosersFromWinners (NOT divided by 2!)
+      const numMatches = numLosersFromWinners;
       const nextRound = [];
       for (let i = 0; i < numMatches; i++) {
         nextRound.push({
@@ -223,7 +705,8 @@ class Tournament {
       currentRoundSize = numMatches;
       roundNum++;
       
-      // Round that receives winners from previous losers round (if not the last round)
+      // "Minor" round: Winners from the major round play each other
+      // Only create if not the last winners bracket round (losers finals doesn't need a minor round after)
       if (wRound < numWinnersRounds - 1) {
         const numMatches2 = Math.ceil(currentRoundSize / 2);
         const nextRound2 = [];
@@ -251,6 +734,69 @@ class Tournament {
     this.currentTournament = this.tournaments.find(t => t.id === id);
     this.viewMode = 'bracket';
     this.render();
+  }
+
+  // Helper method that looks up the match and gets the player by index (0 or 1)
+  // This avoids issues with special characters in player names in onclick handlers
+  async recordMatchResultByIndex(matchId, playerIndex) {
+    console.log('recordMatchResultByIndex called:', matchId, playerIndex);
+    if (!this.currentTournament) {
+      console.error('No current tournament');
+      return;
+    }
+    
+    const match = this.findMatchById(matchId);
+    if (!match) {
+      console.error('Match not found:', matchId);
+      console.log('Bracket structure:', JSON.stringify(this.currentTournament.bracket, null, 2));
+      return;
+    }
+    
+    const winner = playerIndex === 0 ? match.player1 : match.player2;
+    console.log('Recording winner:', winner);
+    return this.recordMatchResult(matchId, winner);
+  }
+
+  findMatchById(matchId) {
+    if (!this.currentTournament) return null;
+    
+    const searchRounds = (rounds) => {
+      if (!rounds) return null;
+      for (const round of rounds) {
+        for (const match of round) {
+          if (match.id === matchId) return match;
+        }
+      }
+      return null;
+    };
+
+    const bracket = this.currentTournament.bracket;
+    
+    if (bracket.type === 'double-elimination') {
+      // Check grand finals first
+      if (bracket.grandFinal2) {
+        for (const match of bracket.grandFinal2) {
+          if (match.id === matchId) return match;
+        }
+      }
+      if (bracket.grandFinal) {
+        for (const match of bracket.grandFinal) {
+          if (match.id === matchId) return match;
+        }
+      }
+      // Check brackets
+      let found = searchRounds(bracket.winners?.rounds);
+      if (found) return found;
+      return searchRounds(bracket.losers?.rounds);
+    } else if (bracket.winners) {
+      // For brackets stored with winners sub-object
+      return searchRounds(bracket.winners.rounds);
+    } else if (bracket.rounds) {
+      // For single-elimination and round-robin stored directly
+      return searchRounds(bracket.rounds);
+    }
+    
+    return null;
   }
 
   async recordMatchResult(matchId, winner) {
@@ -355,16 +901,28 @@ class Tournament {
   advanceWinner(match, rounds) {
     if (match.round + 1 >= rounds.length) return;
     
+    const currentRound = rounds[match.round];
     const nextRound = rounds[match.round + 1];
-    // Calculate which match in the next round this winner should go to
-    // Match 1 and 2 go to match 1, Match 3 and 4 go to match 2, etc.
-    const nextMatchIndex = Math.ceil(match.matchNum / 2) - 1;
+    
+    let nextMatchIndex;
+    let usePlayer1;
+    
+    // Check if next round has same number of matches (1:1 mapping for losers bracket "major" rounds)
+    if (nextRound.length === currentRound.length) {
+      // 1:1 mapping: Each winner goes to corresponding match in next round
+      // Winner goes to player1 (player2 will be filled by WB loser via advanceLoser)
+      nextMatchIndex = match.matchNum - 1;
+      usePlayer1 = true;
+    } else {
+      // 2:1 mapping (standard halving): Match 1&2 → Match 1, Match 3&4 → Match 2, etc.
+      nextMatchIndex = Math.ceil(match.matchNum / 2) - 1;
+      // Odd match numbers go to player1, even go to player2
+      usePlayer1 = (match.matchNum % 2 === 1);
+    }
     
     if (nextMatchIndex >= 0 && nextMatchIndex < nextRound.length) {
       const nextMatch = nextRound[nextMatchIndex];
-      // Determine if this winner should be player1 or player2
-      // Odd match numbers (1, 3, 5...) go to player1, even (2, 4, 6...) go to player2
-      if (match.matchNum % 2 === 1) {
+      if (usePlayer1) {
         nextMatch.player1 = match.winner;
       } else {
         nextMatch.player2 = match.winner;
@@ -376,16 +934,19 @@ class Tournament {
     if (!match.winner) return;
     
     const loser = match.winner === match.player1 ? match.player2 : match.player1;
+    console.log(`advanceLoser: match ${match.id}, winner=${match.winner}, player1=${match.player1}, player2=${match.player2}, loser=${loser}`);
     if (!loser || loser === 'BYE' || loser === 'TBD') return;
 
     const winnersRound = match.round;
+    const numWinnersRounds = winnersRounds.length;
     
     // Determine which losers bracket round this loser should go to
     // Based on generateLosersBracket structure:
     // - Round 0: receives losers from winners round 0
-    // - Round 1: receives losers from winners round 1 (created when wRound=1)
-    // - Round 3: receives losers from winners round 2 (created when wRound=2)
-    // - Round 5: receives losers from winners round 3 (created when wRound=3)
+    // - For winners round wRound (1 to numWinnersRounds-2):
+    //   - Round 1: receives losers from winners round 1 (created when wRound=1)
+    //   - Round 3: receives losers from winners round 2 (created when wRound=2)
+    //   - Round 5: receives losers from winners round 3 (created when wRound=3)
     // Pattern: Winners Round N → Losers Round (2*N - 1) for N >= 1, Round 0 → Round 0
     
     let losersRoundIndex;
@@ -396,10 +957,10 @@ class Tournament {
       losersRoundIndex = (winnersRound * 2) - 1;
     }
     
-    // Ensure the round exists
-    if (losersRoundIndex >= losersRounds.length || losersRoundIndex < 0) {
-      // If the round doesn't exist, try to find the last available round that can accept this loser
-      console.warn(`Losers bracket round ${losersRoundIndex} doesn't exist for winners round ${winnersRound}, finding alternative`);
+    // Validate that the round exists
+    if (losersRoundIndex < 0 || losersRoundIndex >= losersRounds.length) {
+      console.warn(`Losers bracket round ${losersRoundIndex} doesn't exist for winners round ${winnersRound}`);
+      // Try to find any available slot as fallback
       for (let i = losersRounds.length - 1; i >= 0; i--) {
         const round = losersRounds[i];
         for (const m of round) {
@@ -416,62 +977,125 @@ class Tournament {
       return;
     }
     
-    if (losersRounds[losersRoundIndex].length > 0) {
-      const targetLosersRound = losersRounds[losersRoundIndex];
-      
-      // Find an available match in this round
+    const targetLosersRound = losersRounds[losersRoundIndex];
+    if (!targetLosersRound || targetLosersRound.length === 0) {
+      console.warn(`Losers bracket round ${losersRoundIndex} is empty`);
+      return;
+    }
+    
+    // Find an available match in this round
+    if (winnersRound === 0) {
       // For round 0, pair losers from adjacent winners matches
-      if (winnersRound === 0) {
-        const matchIndex = Math.floor((match.matchNum - 1) / 2);
-        if (matchIndex < targetLosersRound.length) {
-          const targetMatch = targetLosersRound[matchIndex];
-          if (targetMatch.player1 === 'TBD') {
-            targetMatch.player1 = loser;
-          } else if (targetMatch.player2 === 'TBD') {
-            targetMatch.player2 = loser;
-          }
+      // Match 1&2 → losers match 1, Match 3&4 → losers match 2, etc.
+      const matchIndex = Math.floor((match.matchNum - 1) / 2);
+      if (matchIndex >= 0 && matchIndex < targetLosersRound.length) {
+        const targetMatch = targetLosersRound[matchIndex];
+        // Check that this loser isn't already in the match (prevent duplicates)
+        if (targetMatch.player1 === loser || targetMatch.player2 === loser) {
+          console.warn(`Loser ${loser} already in losers match, skipping`);
+          return;
+        }
+        if (targetMatch.player1 === 'TBD') {
+          targetMatch.player1 = loser;
+        } else if (targetMatch.player2 === 'TBD') {
+          targetMatch.player2 = loser;
+        }
+      }
+    } else {
+      // For later rounds (semifinals, finals), use 1:1 mapping
+      // WR match N loser → LR match N (same index)
+      // The WB loser goes to player2 because player1 is the LB winner from previous round
+      // 
+      // Example for 8 players:
+      // - WR1 match 1 loser → LR1 match 1, player2
+      // - WR1 match 2 loser → LR1 match 2, player2
+      // - WR2 match 1 loser → LR3 match 1, player2
+      
+      const matchIndex = match.matchNum - 1;
+      
+      if (matchIndex >= 0 && matchIndex < targetLosersRound.length) {
+        const targetMatch = targetLosersRound[matchIndex];
+        // WB loser goes to player2 (player1 is the LB winner from advanceWinner)
+        if (targetMatch.player2 === 'TBD') {
+          targetMatch.player2 = loser;
+        } else if (targetMatch.player1 === 'TBD') {
+          // Fallback: if player2 is already filled, use player1
+          targetMatch.player1 = loser;
         }
       } else {
-        // For later rounds, find an available slot
-        // Try to match based on match number first, then find any available slot
-        const matchIndex = Math.floor((match.matchNum - 1) / 2);
-        let targetMatch = null;
-        
-        if (matchIndex < targetLosersRound.length) {
-          targetMatch = targetLosersRound[matchIndex];
-        } else {
-          // If calculated index is out of bounds, find first available match
-          for (const m of targetLosersRound) {
-            if (m.player1 === 'TBD' || m.player2 === 'TBD') {
-              targetMatch = m;
-              break;
-            }
-          }
-        }
-        
-        if (targetMatch) {
-          if (targetMatch.player1 === 'TBD') {
-            targetMatch.player1 = loser;
-          } else if (targetMatch.player2 === 'TBD') {
-            targetMatch.player2 = loser;
+        // Fallback: if calculated index is out of bounds, find any available slot
+        for (const m of targetLosersRound) {
+          if (m.player2 === 'TBD') {
+            m.player2 = loser;
+            break;
+          } else if (m.player1 === 'TBD') {
+            m.player1 = loser;
+            break;
           }
         }
       }
     }
   }
 
+  // Extract unique participant names from bracket matches (for older tournaments)
+  extractParticipantsFromBracket() {
+    if (!this.currentTournament || !this.currentTournament.bracket) {
+      return this.currentTournament?.participants || [];
+    }
+
+    const participants = new Set();
+    
+    const extractFromRounds = (rounds) => {
+      if (!rounds) return;
+      rounds.forEach(round => {
+        round.forEach(match => {
+          if (match.player1 && match.player1 !== 'TBD' && match.player1 !== 'BYE') {
+            participants.add(match.player1);
+          }
+          if (match.player2 && match.player2 !== 'TBD' && match.player2 !== 'BYE') {
+            participants.add(match.player2);
+          }
+        });
+      });
+    };
+
+    const bracket = this.currentTournament.bracket;
+    
+    if (bracket.type === 'double-elimination') {
+      extractFromRounds(bracket.winners?.rounds);
+      extractFromRounds(bracket.losers?.rounds);
+    } else if (bracket.winners) {
+      extractFromRounds(bracket.winners.rounds);
+    } else if (bracket.rounds) {
+      extractFromRounds(bracket.rounds);
+    }
+
+    return Array.from(participants);
+  }
+
   getTournamentStats() {
     if (!this.currentTournament) return null;
 
     const stats = {};
-    this.currentTournament.participants.forEach(p => {
-      stats[p] = { wins: 0, losses: 0, matches: 0 };
+    
+    // Get participant list - use finalParticipants if available, otherwise derive from bracket
+    let participantList = this.currentTournament.finalParticipants;
+    
+    if (!participantList) {
+      // For older tournaments without finalParticipants, extract from bracket
+      participantList = this.extractParticipantsFromBracket();
+    }
+    
+    participantList.forEach(p => {
+      if (p && p !== 'TBD' && p !== 'BYE') {
+        stats[p] = { wins: 0, losses: 0, matches: 0 };
+      }
     });
 
     const processMatches = (rounds) => {
       rounds.forEach(round => {
         round.forEach(match => {
-          if (match.winner) {
+          if (match.winner && stats[match.winner]) {
             stats[match.winner].wins++;
             stats[match.winner].matches++;
             const loser = match.winner === match.player1 ? match.player2 : match.player1;
@@ -492,7 +1116,7 @@ class Tournament {
       // Process grand final(s)
       if (this.currentTournament.bracket.grandFinal) {
         this.currentTournament.bracket.grandFinal.forEach(match => {
-          if (match.winner) {
+          if (match.winner && stats[match.winner]) {
             stats[match.winner].wins++;
             stats[match.winner].matches++;
             const loser = match.winner === match.player1 ? match.player2 : match.player1;
@@ -505,7 +1129,7 @@ class Tournament {
       }
       if (this.currentTournament.bracket.grandFinal2) {
         this.currentTournament.bracket.grandFinal2.forEach(match => {
-          if (match.winner) {
+          if (match.winner && stats[match.winner]) {
             stats[match.winner].wins++;
             stats[match.winner].matches++;
             const loser = match.winner === match.player1 ? match.player2 : match.player1;
@@ -650,6 +1274,42 @@ class Tournament {
     }
   }
 
+  // Helper to escape player names for use in onclick handlers
+  escapeForJs(str) {
+    if (!str) return '';
+    return str
+      .replace(/\\/g, '\\\\')
+      .replace(/'/g, "\\'")
+      .replace(/"/g, '&quot;')
+      .replace(/&/g, '&amp;');
+  }
+
+  // Helper to escape player names for HTML attribute values
+  escapeForAttr(str) {
+    if (!str) return '';
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/'/g, '&#39;')
+      .replace(/"/g, '&quot;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  // Setup click handlers for bracket matches using event delegation
+  setupBracketClickHandlers(container) {
+    container.addEventListener('click', (e) => {
+      // Find the clicked bracket-player or match-player element
+      const playerEl = e.target.closest('[data-match-id][data-clickable="true"]');
+      if (!playerEl) return;
+      
+      const matchId = playerEl.dataset.matchId;
+      const playerIndex = parseInt(playerEl.dataset.playerIndex, 10);
+      
+      console.log('Bracket click detected:', matchId, playerIndex);
+      this.recordMatchResultByIndex(matchId, playerIndex);
+    });
+  }
+
   renderVisualBracket(bracket) {
     if (!bracket || bracket.type === 'round-robin') {
       return this.renderRoundRobinBracket(bracket);
@@ -688,21 +1348,23 @@ class Tournament {
         const canClickPlayer1 = player1Determined && !match.winner;
         const canClickPlayer2 = player2Determined && !match.winner;
         
-        const clickHandler1 = canClickPlayer1 ? `onclick="tournament.recordMatchResult('${match.id}', '${match.player1}')"` : '';
-        const clickHandler2 = canClickPlayer2 ? `onclick="tournament.recordMatchResult('${match.id}', '${match.player2}')"` : '';
+        // Escape player names for display
+        const escapedPlayer1 = this.escapeForAttr(match.player1);
+        const escapedPlayer2 = this.escapeForAttr(match.player2);
+        
         const cursorStyle1 = canClickPlayer1 ? 'cursor: pointer;' : 'cursor: default; opacity: 0.6;';
         const cursorStyle2 = canClickPlayer2 ? 'cursor: pointer;' : 'cursor: default; opacity: 0.6;';
         
         html += `
           <div class="bracket-match">
             <div class="bracket-player ${match.winner === match.player1 ? 'winner' : ''}" 
-                 ${clickHandler1} style="${cursorStyle1}">
-              ${match.player1 || 'TBD'}
+                 data-match-id="${match.id}" data-player-index="0" ${canClickPlayer1 ? 'data-clickable="true"' : ''} style="${cursorStyle1}">
+              ${escapedPlayer1 || 'TBD'}
             </div>
             <div class="bracket-vs">vs</div>
             <div class="bracket-player ${match.winner === match.player2 ? 'winner' : ''}" 
-                 ${clickHandler2} style="${cursorStyle2}">
-              ${match.player2 || 'TBD'}
+                 data-match-id="${match.id}" data-player-index="1" ${canClickPlayer2 ? 'data-clickable="true"' : ''} style="${cursorStyle2}">
+              ${escapedPlayer2 || 'TBD'}
             </div>
             ${roundIdx < rounds.length - 1 && this.isRoundComplete(round) ? '<div class="bracket-connector"></div>' : ''}
           </div>
@@ -729,21 +1391,26 @@ class Tournament {
     
     return `
       <div class="round-robin-bracket">
-        ${bracket.rounds[0].map(match => `
+        ${bracket.rounds[0].map(match => {
+          const escapedPlayer1 = this.escapeForAttr(match.player1);
+          const escapedPlayer2 = this.escapeForAttr(match.player2);
+          const canClick1 = !match.winner;
+          const canClick2 = !match.winner;
+          return `
           <div class="match">
             <div class="match-players">
               <button class="match-player ${match.winner === match.player1 ? 'winner' : ''}" 
-                      onclick="tournament.recordMatchResult('${match.id}', '${match.player1}')">
-                ${match.player1}
+                      data-match-id="${match.id}" data-player-index="0" ${canClick1 ? 'data-clickable="true"' : ''}>
+                ${escapedPlayer1}
               </button>
               <span class="vs">vs</span>
               <button class="match-player ${match.winner === match.player2 ? 'winner' : ''}" 
-                      onclick="tournament.recordMatchResult('${match.id}', '${match.player2}')">
-                ${match.player2}
+                      data-match-id="${match.id}" data-player-index="1" ${canClick2 ? 'data-clickable="true"' : ''}>
+                ${escapedPlayer2}
               </button>
             </div>
           </div>
-        `).join('')}
+        `}).join('')}
       </div>
     `;
   }
@@ -803,19 +1470,21 @@ class Tournament {
       const grandFinal = bracket.grandFinal[0];
       const canClickPlayer1 = grandFinal.player1 && !grandFinal.winner;
       const canClickPlayer2 = grandFinal.player2 && !grandFinal.winner;
+      const escapedGF1 = this.escapeForAttr(grandFinal.player1);
+      const escapedGF2 = this.escapeForAttr(grandFinal.player2);
       
       html += `
         <div class="bracket-match grand-final-match">
           <div class="bracket-player ${grandFinal.winner === grandFinal.player1 ? 'winner' : ''}" 
-               ${canClickPlayer1 ? `onclick="tournament.recordMatchResult('${grandFinal.id}', '${grandFinal.player1}')"` : ''} 
+               data-match-id="${grandFinal.id}" data-player-index="0" ${canClickPlayer1 ? 'data-clickable="true"' : ''}
                style="${canClickPlayer1 ? 'cursor: pointer;' : 'cursor: default; opacity: 0.6;'}">
-            ${grandFinal.player1 || 'TBD'}
+            ${escapedGF1 || 'TBD'}
           </div>
           <div class="bracket-vs">vs</div>
           <div class="bracket-player ${grandFinal.winner === grandFinal.player2 ? 'winner' : ''}" 
-               ${canClickPlayer2 ? `onclick="tournament.recordMatchResult('${grandFinal.id}', '${grandFinal.player2}')"` : ''} 
+               data-match-id="${grandFinal.id}" data-player-index="1" ${canClickPlayer2 ? 'data-clickable="true"' : ''}
                style="${canClickPlayer2 ? 'cursor: pointer;' : 'cursor: default; opacity: 0.6;'}">
-            ${grandFinal.player2 || 'TBD'}
+            ${escapedGF2 || 'TBD'}
           </div>
         </div>
       `;
@@ -837,20 +1506,22 @@ class Tournament {
         const grandFinal2 = bracket.grandFinal2[0];
         const canClickPlayer1_2 = grandFinal2.player1 && !grandFinal2.winner;
         const canClickPlayer2_2 = grandFinal2.player2 && !grandFinal2.winner;
+        const escapedGF2_1 = this.escapeForAttr(grandFinal2.player1);
+        const escapedGF2_2 = this.escapeForAttr(grandFinal2.player2);
         
         html += '<h4 class="bracket-section-subtitle">Grand Final 2 (if needed)</h4>';
         html += `
           <div class="bracket-match grand-final-match">
             <div class="bracket-player ${grandFinal2.winner === grandFinal2.player1 ? 'winner' : ''}" 
-                 ${canClickPlayer1_2 ? `onclick="tournament.recordMatchResult('${grandFinal2.id}', '${grandFinal2.player1}')"` : ''} 
+                 data-match-id="${grandFinal2.id}" data-player-index="0" ${canClickPlayer1_2 ? 'data-clickable="true"' : ''}
                  style="${canClickPlayer1_2 ? 'cursor: pointer;' : 'cursor: default; opacity: 0.6;'}">
-              ${grandFinal2.player1 || 'TBD'}
+              ${escapedGF2_1 || 'TBD'}
             </div>
             <div class="bracket-vs">vs</div>
             <div class="bracket-player ${grandFinal2.winner === grandFinal2.player2 ? 'winner' : ''}" 
-                 ${canClickPlayer2_2 ? `onclick="tournament.recordMatchResult('${grandFinal2.id}', '${grandFinal2.player2}')"` : ''} 
+                 data-match-id="${grandFinal2.id}" data-player-index="1" ${canClickPlayer2_2 ? 'data-clickable="true"' : ''}
                  style="${canClickPlayer2_2 ? 'cursor: pointer;' : 'cursor: default; opacity: 0.6;'}">
-              ${grandFinal2.player2 || 'TBD'}
+              ${escapedGF2_2 || 'TBD'}
             </div>
           </div>
         `;
@@ -880,15 +1551,23 @@ class Tournament {
       const stats = this.getTournamentStats();
       const winner = this.getWinner();
 
+      const gameMode = this.currentTournament.gameMode || 'singles';
+      const seedingMode = this.currentTournament.seedingMode || 'random';
+      
       container.innerHTML = `
         <div class="tournament-header">
           <div>
             <h2>${this.currentTournament.name}</h2>
-            <span class="tournament-type">${this.currentTournament.type}</span>
+            <div class="tournament-badges">
+              <span class="tournament-type">${this.currentTournament.type}</span>
+              <span class="tournament-badge ${gameMode}">${gameMode === 'doubles' ? 'Doubles' : 'Singles'}</span>
+              <span class="tournament-badge ${seedingMode}">${seedingMode === 'ranked' ? 'Ranked' : 'Random'}</span>
+            </div>
           </div>
           <div class="tournament-header-actions">
             <button class="btn ${this.viewMode === 'bracket' ? 'active' : ''}" onclick="tournament.viewMode = 'bracket'; tournament.render();">Bracket</button>
             <button class="btn ${this.viewMode === 'stats' ? 'active' : ''}" onclick="tournament.viewMode = 'stats'; tournament.render();">Stats</button>
+            ${this.currentTournament.teams ? `<button class="btn ${this.viewMode === 'teams' ? 'active' : ''}" onclick="tournament.viewMode = 'teams'; tournament.render();">Teams</button>` : ''}
             <button class="btn" onclick="tournament.currentTournament = null; tournament.render();">Back to List</button>
             <button class="btn" onclick="tournament.deleteTournament('${this.currentTournament.id}')">Delete</button>
           </div>
@@ -938,12 +1617,47 @@ class Tournament {
               </div>
             </div>
           </div>
+        ` : this.viewMode === 'teams' && this.currentTournament.teams ? `
+          <div class="tournament-teams-view">
+            <h3>Teams</h3>
+            ${this.currentTournament.powerRankings ? `
+              <p class="teams-info">Teams were formed by pairing highest-ranked players with lowest-ranked players for balanced competition.</p>
+            ` : `
+              <p class="teams-info">Teams were randomly paired.</p>
+            `}
+            <div class="teams-grid-view">
+              ${this.currentTournament.teams.map((team, idx) => `
+                <div class="team-card-view ${team.isSolo ? 'solo-team' : ''}">
+                  <div class="team-header">
+                    <span class="team-name-view">${team.name}</span>
+                    ${team.combinedScore ? `<span class="team-score-view">${team.combinedScore} pts</span>` : ''}
+                  </div>
+                  <div class="team-players-view">
+                    ${team.players.map(p => `
+                      <div class="team-player-card">
+                        <span class="player-name">${p}</span>
+                        ${this.currentTournament.powerRankings ? `
+                          <span class="player-ranks">
+                            O: #${this.currentTournament.powerRankings.offense.indexOf(p) + 1} 
+                            D: #${this.currentTournament.powerRankings.defense.indexOf(p) + 1}
+                          </span>
+                        ` : ''}
+                      </div>
+                    `).join('')}
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
         ` : `
           <div class="bracket-container">
             ${this.renderBracket(this.currentTournament.bracket)}
           </div>
         `}
       `;
+      
+      // Setup click handlers for bracket matches using event delegation
+      this.setupBracketClickHandlers(container);
     } else {
       container.innerHTML = `
         <div class="tournament-header">
@@ -957,14 +1671,32 @@ class Tournament {
             <label for="name">Tournament Name</label>
             <input type="text" id="name" name="name" placeholder="e.g., 2024 Championship" required>
           </div>
-          <div class="form-group">
-            <label for="type">Bracket Type</label>
-            <select id="type" name="type" required>
-              <option value="single-elimination">Single Elimination</option>
-              <option value="double-elimination">Double Elimination</option>
-              <option value="round-robin">Round Robin</option>
-            </select>
+          
+          <div class="form-row">
+            <div class="form-group">
+              <label for="type">Bracket Type</label>
+              <select id="type" name="type" required>
+                <option value="single-elimination">Single Elimination</option>
+                <option value="double-elimination">Double Elimination</option>
+                <option value="round-robin">Round Robin</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="game-mode">Game Mode</label>
+              <select id="game-mode" name="game-mode">
+                <option value="singles">Singles</option>
+                <option value="doubles">Doubles (Pairs)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="seeding-mode">Seeding Mode</label>
+              <select id="seeding-mode" name="seeding-mode">
+                <option value="random">Random</option>
+                <option value="ranked">Ranked (Power Rankings)</option>
+              </select>
+            </div>
           </div>
+
           <div class="form-group">
             <label for="participants">Add Participants</label>
             <div class="participant-input-group">
@@ -973,6 +1705,17 @@ class Tournament {
             </div>
             <div id="participant-list" class="participant-list"></div>
           </div>
+
+          <!-- Power Rankings Section (hidden by default) -->
+          <div id="power-rankings-container" class="power-rankings-container" style="display: none;">
+            <h3 class="power-rankings-title">Power Rankings</h3>
+            <p class="power-rankings-desc">Drag players to adjust their offense and defense rankings. Combined scores determine seeding.</p>
+            <div id="power-rankings-lists"></div>
+          </div>
+
+          <!-- Teams Preview (for doubles mode) -->
+          <div id="teams-preview" class="teams-preview" style="display: none;"></div>
+
           <button type="submit" class="btn primary">Create Tournament</button>
         </form>
 
@@ -999,14 +1742,26 @@ class Tournament {
                 }
                 const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
                 
+                const gameMode = t.gameMode || 'singles';
+                const seedingMode = t.seedingMode || 'random';
+                
                 return `
                   <div class="tournament-card">
                     <div>
                       <h4>${t.name}</h4>
-                      <span class="tournament-meta">${t.type} • ${t.participants.length} participants</span>
+                      <div class="tournament-card-meta">
+                        <span class="tournament-meta">${t.type} • ${t.participants.length} participants</span>
+                        <div class="tournament-card-badges">
+                          ${gameMode === 'doubles' ? '<span class="badge badge-doubles">Doubles</span>' : ''}
+                          ${seedingMode === 'ranked' ? '<span class="badge badge-ranked">Ranked</span>' : ''}
+                        </div>
+                      </div>
                       ${total > 0 ? `<div class="tournament-progress-bar"><div class="tournament-progress-fill" style="width: ${percentage}%"></div></div>` : ''}
                     </div>
-                    <button class="btn" onclick="tournament.viewTournament('${t.id}')">View</button>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                      <button class="btn" onclick="tournament.viewTournament('${t.id}')">View</button>
+                      <button class="btn" onclick="tournament.deleteTournament('${t.id}')" style="background: rgba(239, 68, 68, 0.15); border-color: var(--danger); color: var(--danger); padding: 8px 12px; font-size: 13px;" title="Delete tournament">×</button>
+                    </div>
                   </div>
                 `;
               }).join('')

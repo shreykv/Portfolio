@@ -51,12 +51,15 @@ class API {
         if (key === 'habits') {
           return Promise.resolve({ habits: [], entries: [] });
         }
+        if (key === 'focus-timer') {
+          return Promise.resolve({ tasks: [], sessions: [] });
+        }
         return Promise.resolve([]);
       }
       return Promise.resolve(JSON.parse(data));
     } else if (method === 'POST') {
-      // Special handling for counters and habits (stores object, not array)
-      if (key === 'counters' || key === 'habits') {
+      // Special handling for counters, habits, and focus-timer (stores object, not array)
+      if (key === 'counters' || key === 'habits' || key === 'focus-timer') {
         localStorage.setItem(key, JSON.stringify(options.body));
         return Promise.resolve(options.body);
       }
@@ -71,8 +74,8 @@ class API {
       localStorage.setItem(key, JSON.stringify(existing));
       return Promise.resolve(newItem);
     } else if (method === 'PUT') {
-      // Special handling for counters and habits
-      if (key === 'counters' || key === 'habits') {
+      // Special handling for counters, habits, and focus-timer
+      if (key === 'counters' || key === 'habits' || key === 'focus-timer') {
         localStorage.setItem(key, JSON.stringify(options.body));
         return Promise.resolve(options.body);
       }
@@ -236,6 +239,29 @@ class API {
       method: 'DELETE',
       body: { id }
     });
+  }
+
+  // Focus Timer API methods
+  async getFocusTimer() {
+    const data = await this.request('/api/focus-timer', { method: 'GET' });
+    if (Array.isArray(data)) {
+      return { tasks: [], sessions: [] };
+    }
+    return data || { tasks: [], sessions: [] };
+  }
+
+  async saveFocusTimer(data) {
+    return this.request('/api/focus-timer', {
+      method: 'POST',
+      body: data
+    });
+  }
+
+  async saveSession(session) {
+    // Sessions are saved as part of the focus timer data
+    const current = await this.getFocusTimer();
+    current.sessions.push(session);
+    return this.saveFocusTimer(current);
   }
 }
 

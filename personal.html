@@ -90,6 +90,7 @@
         <a href="#" data-route="#/personal/gym-log" id="nav-gym-log">Gym Log</a>
         <a href="#" data-route="#/personal/tournament" id="nav-tournament">Tournament</a>
         <a href="#" data-route="#/personal/counter" id="nav-counter">Counter</a>
+        <a href="#" data-route="#/personal/focus-timer" id="nav-focus-timer">Focus Timer</a>
         <a href="/" class="btn">Back to Portfolio</a>
         <button class="btn" onclick="auth.logout(); window.location.href='/personal';">Logout</button>
       </div>
@@ -113,6 +114,7 @@
   <script src="js/gym-log.js"></script>
   <script src="js/tournament.js"></script>
   <script src="js/counter.js"></script>
+  <script src="js/focus-timer.js"></script>
   <script>
     // Initialize authentication check
     const passwordModal = document.getElementById('password-modal');
@@ -187,6 +189,13 @@
                   <p>Track reps, sets, or any custom counts.</p>
                 </div>
               </button>
+              <button class="personal-landing-card" data-route="#/personal/focus-timer" type="button">
+                <div class="card-icon">⏱️</div>
+                <div class="card-body">
+                  <h2>Focus Timer</h2>
+                  <p>Manage tasks with productivity timers and track your time.</p>
+                </div>
+              </button>
             </div>
           </section>
         `;
@@ -221,6 +230,12 @@
         document.getElementById('app-content').innerHTML = '<div id="counter-content"></div>';
         updateActiveNav('nav-counter');
         counter.render();
+      });
+
+      router.register('/personal/focus-timer', () => {
+        document.getElementById('app-content').innerHTML = '<div id="focus-timer-content"></div>';
+        updateActiveNav('nav-focus-timer');
+        focusTimer.render();
       });
 
       // Handle direct access to personal.html (no hash)
@@ -260,6 +275,7 @@
     window.gymLog = gymLog;
     window.tournament = tournament;
     window.counter = counter;
+    window.focusTimer = focusTimer;
   </script>
 </body>
 </html>
