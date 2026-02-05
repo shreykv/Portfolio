@@ -60,6 +60,22 @@ class Tournament {
     if (gameModeSelect) {
       gameModeSelect.addEventListener('change', (e) => this.handleGameModeChange(e));
     }
+
+    // Tournament type change listener (for consolation bracket visibility)
+    const typeSelect = document.getElementById('type');
+    if (typeSelect) {
+      typeSelect.addEventListener('change', (e) => this.handleTypeChange(e));
+    }
+  }
+
+  handleTypeChange(e) {
+    const type = e.target.value;
+    const consolationContainer = document.getElementById('consolation-option-container');
+    
+    if (consolationContainer) {
+      // Only show consolation option for single elimination
+      consolationContainer.style.display = type === 'single-elimination' ? 'block' : 'none';
+    }
   }
 
   handleSeedingModeChange(e) {
@@ -496,16 +512,21 @@ class Tournament {
       finalParticipants = participants;
     }
 
+    // Get consolation option (only for single elimination)
+    const hasConsolation = formData.get('type') === 'single-elimination' && 
+                           document.getElementById('consolation-bracket')?.checked || false;
+
     const tournament = {
       name: formData.get('name'),
       type: formData.get('type'),
       seedingMode: seedingMode,
       gameMode: gameMode,
+      hasConsolation: hasConsolation,
       participants: participants,
       finalParticipants: finalParticipants,
       teams: teams,
       powerRankings: powerRankingsData,
-      bracket: this.generateBracket(finalParticipants, formData.get('type'), seedingMode, powerRankingsData),
+      bracket: this.generateBracket(finalParticipants, formData.get('type'), seedingMode, powerRankingsData, hasConsolation),
       createdAt: new Date().toISOString()
     };
 
@@ -524,7 +545,7 @@ class Tournament {
     }
   }
 
-  generateBracket(participants, type, seedingMode = 'random', powerRankings = null) {
+  generateBracket(participants, type, seedingMode = 'random', powerRankings = null, hasConsolation = false) {
     let orderedParticipants;
     
     if (seedingMode === 'ranked' && powerRankings) {
@@ -536,7 +557,7 @@ class Tournament {
     }
     
     if (type === 'single-elimination') {
-      return this.generateSingleElimination(orderedParticipants);
+      return this.generateSingleElimination(orderedParticipants, hasConsolation);
     } else if (type === 'round-robin') {
       return this.generateRoundRobin(orderedParticipants);
     } else {
@@ -577,7 +598,7 @@ class Tournament {
     return sorted;
   }
 
-  generateSingleElimination(participants) {
+  generateSingleElimination(participants, hasConsolation = false) {
     const rounds = [];
     
     // First round only - subsequent rounds will be created dynamically
@@ -618,7 +639,137 @@ class Tournament {
       rounds.push(nextRound);
     }
 
-    return { rounds, type: 'single-elimination' };
+    const result = { rounds, type: 'single-elimination' };
+
+    // Generate consolation bracket if enabled
+    if (hasConsolation && numRounds >= 2) {
+      result.consolation = this.generateConsolationBracket(numRounds, numParticipants);
+      result.hasConsolation = true;
+    }
+
+    return result;
+  }
+
+  // Generate consolation bracket for placement matches
+  // Structure: Each main bracket round's losers play for placement
+  // - Semifinal losers → 3rd place match
+  // - Quarterfinal losers → 5th-8th placement (2 matches for 5th/7th)
+  // - etc.
+  generateConsolationBracket(numRounds, numParticipants) {
+    const consolation = {
+      rounds: [],
+      placementLabels: {} // Maps round index to placement description
+    };
+
+    // For each round of the main bracket (except the final), 
+    // create consolation matches for that round's losers
+    // We work backwards from semifinals to earlier rounds
+    
+    // Semifinal losers (round numRounds-2) → 3rd place match
+    // Quarterfinal losers (round numRounds-3) → 5th-8th placement
+    // etc.
+
+    let currentPlacement = 3; // Start at 3rd place
+
+    for (let mainRound = numRounds - 2; mainRound >= 0; mainRound--) {
+      // Number of matches in this main bracket round determines number of losers
+      const numLosersFromRound = Math.ceil(Math.pow(2, numRounds - mainRound - 1));
+      
+      // For 3rd place match (semifinal losers), we just need 1 match
+      // For 5th-8th (quarterfinal losers with 4 losers), we need:
+      //   - 2 matches for 5th/7th semifinals
+      //   - Then 1 match for 5th place, 1 match for 7th place
+      
+      if (mainRound === numRounds - 2) {
+        // Semifinal losers → single 3rd place match
+        const consolationRound = [{
+          id: `consolation-3rd-place`,
+          player1: 'TBD',
+          player2: 'TBD',
+          winner: null,
+          round: consolation.rounds.length,
+          matchNum: 1,
+          bracket: 'consolation',
+          placementFor: '3rd Place',
+          sourceRound: mainRound
+        }];
+        consolation.rounds.push(consolationRound);
+        consolation.placementLabels[consolation.rounds.length - 1] = '3rd Place Match';
+        currentPlacement = 5;
+      } else if (numLosersFromRound >= 2) {
+        // For earlier rounds, create placement matches
+        // E.g., 4 QF losers: 2 semifinal matches → 5th place final + 7th place final
+        
+        const numMatchesNeeded = Math.floor(numLosersFromRound / 2);
+        
+        // First, create the "semifinal" matches for this placement level
+        const placementSemis = [];
+        for (let i = 0; i < numMatchesNeeded; i++) {
+          placementSemis.push({
+            id: `consolation-r${consolation.rounds.length}-m${i}`,
+            player1: 'TBD',
+            player2: 'TBD',
+            winner: null,
+            round: consolation.rounds.length,
+            matchNum: i + 1,
+            bracket: 'consolation',
+            placementFor: `${currentPlacement}th-${currentPlacement + numLosersFromRound - 1}th`,
+            sourceRound: mainRound
+          });
+        }
+        consolation.rounds.push(placementSemis);
+        consolation.placementLabels[consolation.rounds.length - 1] = `${this.getOrdinal(currentPlacement)}-${this.getOrdinal(currentPlacement + numLosersFromRound - 1)} Placement`;
+
+        // If we have 4+ losers, create final matches for placement
+        if (numMatchesNeeded >= 2) {
+          // Winners of placement semis play for higher placement (e.g., 5th)
+          // Losers of placement semis play for lower placement (e.g., 7th)
+          const placementFinals = [];
+          
+          // Higher placement final (e.g., 5th place)
+          placementFinals.push({
+            id: `consolation-${currentPlacement}th-place`,
+            player1: 'TBD',
+            player2: 'TBD',
+            winner: null,
+            round: consolation.rounds.length,
+            matchNum: 1,
+            bracket: 'consolation',
+            placementFor: `${this.getOrdinal(currentPlacement)} Place`,
+            isPlacementFinal: true,
+            placementRank: currentPlacement
+          });
+          
+          // Lower placement final (e.g., 7th place)
+          placementFinals.push({
+            id: `consolation-${currentPlacement + 2}th-place`,
+            player1: 'TBD',
+            player2: 'TBD',
+            winner: null,
+            round: consolation.rounds.length,
+            matchNum: 2,
+            bracket: 'consolation',
+            placementFor: `${this.getOrdinal(currentPlacement + 2)} Place`,
+            isPlacementFinal: true,
+            placementRank: currentPlacement + 2
+          });
+          
+          consolation.rounds.push(placementFinals);
+          consolation.placementLabels[consolation.rounds.length - 1] = `${this.getOrdinal(currentPlacement)} & ${this.getOrdinal(currentPlacement + 2)} Place`;
+        }
+        
+        currentPlacement += numLosersFromRound;
+      }
+    }
+
+    return consolation;
+  }
+
+  // Helper to get ordinal suffix (1st, 2nd, 3rd, 4th, etc.)
+  getOrdinal(n) {
+    const s = ['th', 'st', 'nd', 'rd'];
+    const v = n % 100;
+    return n + (s[(v - 20) % 10] || s[v] || s[0]);
   }
 
   generateRoundRobin(participants) {
@@ -649,20 +800,33 @@ class Tournament {
     const numWinnersRounds = Math.ceil(Math.log2(numParticipants));
     
     // Losers bracket structure for double elimination:
-    // - LR0: Losers from WR0 play each other (numMatches = WR0_matches / 2)
+    // - LR0: Losers from WR0 play each other
     // - For each winners bracket round wRound (1 to numWinnersRounds-1):
-    //   - "Major" round: LR winners play against WR losers (numMatches = numLosersFromWR)
-    //   - "Minor" round: LR winners play each other (numMatches = previous / 2) - only if not last
+    //   - "Major" round: LR winners play against WR losers
+    //   - "Minor" round: LR winners play each other - only if not last
     //
-    // Example for 8 players (numWinnersRounds = 3):
-    // - LR0: 2 matches (4 losers from WR0 paired up)
-    // - LR1: 2 matches (2 LR0 winners vs 2 WR1 losers) - "major" round
-    // - LR2: 1 match (2 LR1 winners play each other) - "minor" round  
-    // - LR3: 1 match (1 LR2 winner vs 1 WR2 loser) - "major" round (losers finals)
+    // For non-power-of-2 participants, we need to handle byes properly:
+    // - Count actual losers from WR0 (excluding BYE matches)
+    // - If odd number of losers, one gets a bye directly to LR1
     
-    // Calculate number of matches in first losers round (losers from winners round 0)
-    // Winners round 0 has numParticipants/2 matches, so losers round 0 has numParticipants/4 matches
-    const firstLosersRoundMatches = Math.ceil(numParticipants / 4);
+    // Calculate number of actual losers from WR0
+    // If numParticipants is odd, one WR0 match has a BYE, so that "loser" doesn't count
+    const numWR0Matches = Math.ceil(numParticipants / 2);
+    const numActualLosersFromWR0 = Math.floor(numParticipants / 2);
+    
+    // LR0 matches = floor(actualLosers / 2) - if odd, one loser bypasses to LR1
+    const firstLosersRoundMatches = Math.floor(numActualLosersFromWR0 / 2);
+    const hasLR0Bye = (numActualLosersFromWR0 % 2 === 1);
+    
+    // Track bye info for later use in advanceLoser
+    const byeInfo = {
+      hasLR0Bye,
+      numActualLosersFromWR0,
+      // The loser from the LAST WR0 match (highest matchNum with real loser) gets the bye
+      // They will be routed directly to LR1 instead of LR0
+      lr0ByeMatchNum: hasLR0Bye ? numActualLosersFromWR0 : null
+    };
+    
     const firstRound = [];
     for (let i = 0; i < firstLosersRoundMatches; i++) {
       firstRound.push({
@@ -678,17 +842,23 @@ class Tournament {
     rounds.push(firstRound);
 
     // Generate subsequent losers bracket rounds
-    let currentRoundSize = firstLosersRoundMatches;
+    // After LR0, the number of players advancing includes:
+    // - LR0 winners (firstLosersRoundMatches)
+    // - Plus the bye recipient if hasLR0Bye
+    let currentRoundSize = firstLosersRoundMatches + (hasLR0Bye ? 1 : 0);
     let roundNum = 1;
     
     // For each winners bracket round (1 to numWinnersRounds-1), create corresponding losers bracket rounds
     for (let wRound = 1; wRound < numWinnersRounds; wRound++) {
       // Calculate how many losers will come from this winners bracket round
-      const numLosersFromWinners = Math.ceil(Math.pow(2, numWinnersRounds - wRound - 1));
+      // For non-power-of-2, we need to account for BYE matches in WR
+      const numWRMatches = Math.ceil(Math.pow(2, numWinnersRounds - wRound - 1));
       
-      // "Major" round: Each WB loser plays against a LB winner from previous round
-      // numMatches = numLosersFromWinners (NOT divided by 2!)
-      const numMatches = numLosersFromWinners;
+      // "Major" round: LB players face WB losers
+      // The number of matches is the max of LB players coming in and WB losers coming in
+      const numLBPlayersFromPrevRound = currentRoundSize;
+      const numMatches = Math.max(numLBPlayersFromPrevRound, numWRMatches);
+      
       const nextRound = [];
       for (let i = 0; i < numMatches; i++) {
         nextRound.push({
@@ -727,7 +897,7 @@ class Tournament {
       }
     }
 
-    return { rounds, type: 'losers' };
+    return { rounds, type: 'losers', byeInfo };
   }
 
   async viewTournament(id) {
@@ -793,7 +963,13 @@ class Tournament {
       return searchRounds(bracket.winners.rounds);
     } else if (bracket.rounds) {
       // For single-elimination and round-robin stored directly
-      return searchRounds(bracket.rounds);
+      let found = searchRounds(bracket.rounds);
+      if (found) return found;
+      
+      // Check consolation bracket if exists
+      if (bracket.consolation?.rounds) {
+        return searchRounds(bracket.consolation.rounds);
+      }
     }
     
     return null;
@@ -813,16 +989,25 @@ class Tournament {
               if (bracketType === 'winners') {
                 // Advance winner to next winners bracket round
                 this.advanceWinner(match, rounds);
-                // Advance loser to losers bracket
-                this.advanceLoser(match, this.currentTournament.bracket.winners.rounds, this.currentTournament.bracket.losers.rounds);
+                // Advance loser to losers bracket (pass byeInfo for proper bye handling)
+                const byeInfo = this.currentTournament.bracket.losers.byeInfo;
+                this.advanceLoser(match, this.currentTournament.bracket.winners.rounds, this.currentTournament.bracket.losers.rounds, byeInfo);
               } else if (bracketType === 'losers') {
                 // Advance winner to next losers bracket round
                 this.advanceWinner(match, rounds);
                 // Loser is eliminated (no further advancement)
               }
+            } else if (bracketType === 'consolation') {
+              // Consolation match - advance winners/losers to next consolation round
+              this.advanceConsolationWinner(match, rounds);
             } else {
-              // Single elimination - just advance winner
+              // Single elimination - advance winner
               this.advanceWinner(match, rounds);
+              
+              // If consolation bracket exists, advance loser to it
+              if (this.currentTournament.bracket.consolation) {
+                this.advanceLoserToConsolation(match, rounds);
+              }
             }
             return true;
           }
@@ -886,7 +1071,13 @@ class Tournament {
     } else if (this.currentTournament.bracket.winners) {
       updateMatch(this.currentTournament.bracket.winners.rounds, 'winners');
     } else {
-      updateMatch(this.currentTournament.bracket.rounds, 'single');
+      // Single elimination - check main bracket first
+      let found = updateMatch(this.currentTournament.bracket.rounds, 'single');
+      
+      // If not found and consolation exists, check consolation bracket
+      if (!found && this.currentTournament.bracket.consolation?.rounds) {
+        updateMatch(this.currentTournament.bracket.consolation.rounds, 'consolation');
+      }
     }
 
     try {
@@ -896,6 +1087,107 @@ class Tournament {
     } catch (error) {
       console.error('Error updating tournament:', error);
     }
+  }
+
+  // Advance loser from main bracket to consolation bracket
+  advanceLoserToConsolation(match, mainRounds) {
+    if (!match.winner) return;
+    
+    const loser = match.winner === match.player1 ? match.player2 : match.player1;
+    if (!loser || loser === 'BYE' || loser === 'TBD') return;
+
+    const consolation = this.currentTournament.bracket.consolation;
+    if (!consolation?.rounds) return;
+
+    const numMainRounds = mainRounds.length;
+    const mainRound = match.round;
+    
+    // Find the corresponding consolation round for this loser
+    // Semifinal losers (round numMainRounds-2) → 3rd place match (consolation round 0)
+    // Quarterfinal losers → 5th-8th placement rounds
+    
+    if (mainRound === numMainRounds - 2) {
+      // Semifinal loser → 3rd place match
+      const thirdPlaceMatch = consolation.rounds[0]?.[0];
+      if (thirdPlaceMatch) {
+        if (thirdPlaceMatch.player1 === 'TBD') {
+          thirdPlaceMatch.player1 = loser;
+        } else if (thirdPlaceMatch.player2 === 'TBD') {
+          thirdPlaceMatch.player2 = loser;
+        }
+      }
+    } else if (mainRound < numMainRounds - 2) {
+      // Earlier round losers go to placement rounds
+      // Find the consolation round that corresponds to this main round
+      let consolationRoundIdx = 1; // Start after 3rd place match
+      
+      for (let r = numMainRounds - 3; r >= 0; r--) {
+        if (r === mainRound) {
+          // Found the right consolation round for this main bracket round's losers
+          const targetRound = consolation.rounds[consolationRoundIdx];
+          if (targetRound) {
+            // Find an empty slot in this round
+            for (const m of targetRound) {
+              if (m.player1 === 'TBD') {
+                m.player1 = loser;
+                return;
+              } else if (m.player2 === 'TBD') {
+                m.player2 = loser;
+                return;
+              }
+            }
+          }
+          break;
+        }
+        // Each main round contributes 1-2 consolation rounds
+        consolationRoundIdx += (consolation.rounds[consolationRoundIdx + 1]?.length > 0 && 
+                               consolation.rounds[consolationRoundIdx + 1][0]?.isPlacementFinal) ? 2 : 1;
+      }
+    }
+  }
+
+  // Advance winner in consolation bracket
+  advanceConsolationWinner(match, consolationRounds) {
+    if (!match.winner) return;
+    
+    const loser = match.winner === match.player1 ? match.player2 : match.player1;
+    const winner = match.winner;
+    
+    // Check if this match feeds into placement finals
+    const currentRound = match.round;
+    const nextRound = consolationRounds[currentRound + 1];
+    
+    if (nextRound && nextRound.length > 0) {
+      // Check if next round has placement finals (5th place, 7th place, etc.)
+      const hasPlacementFinals = nextRound.some(m => m.isPlacementFinal);
+      
+      if (hasPlacementFinals) {
+        // Winners go to higher placement final (5th place)
+        // Losers go to lower placement final (7th place)
+        const higherPlacementMatch = nextRound.find(m => m.isPlacementFinal && m.matchNum === 1);
+        const lowerPlacementMatch = nextRound.find(m => m.isPlacementFinal && m.matchNum === 2);
+        
+        if (higherPlacementMatch) {
+          if (higherPlacementMatch.player1 === 'TBD') {
+            higherPlacementMatch.player1 = winner;
+          } else if (higherPlacementMatch.player2 === 'TBD') {
+            higherPlacementMatch.player2 = winner;
+          }
+        }
+        
+        if (lowerPlacementMatch && loser && loser !== 'TBD' && loser !== 'BYE') {
+          if (lowerPlacementMatch.player1 === 'TBD') {
+            lowerPlacementMatch.player1 = loser;
+          } else if (lowerPlacementMatch.player2 === 'TBD') {
+            lowerPlacementMatch.player2 = loser;
+          }
+        }
+      } else {
+        // Regular consolation advancement (like standard bracket progression)
+        this.advanceWinner(match, consolationRounds);
+      }
+    }
+    // If no next round, this was a final placement match - no advancement needed
   }
 
   advanceWinner(match, rounds) {
@@ -930,7 +1222,7 @@ class Tournament {
     }
   }
 
-  advanceLoser(match, winnersRounds, losersRounds) {
+  advanceLoser(match, winnersRounds, losersRounds, byeInfo = null) {
     if (!match.winner) return;
     
     const loser = match.winner === match.player1 ? match.player2 : match.player1;
@@ -941,17 +1233,29 @@ class Tournament {
     const numWinnersRounds = winnersRounds.length;
     
     // Determine which losers bracket round this loser should go to
-    // Based on generateLosersBracket structure:
-    // - Round 0: receives losers from winners round 0
-    // - For winners round wRound (1 to numWinnersRounds-2):
-    //   - Round 1: receives losers from winners round 1 (created when wRound=1)
-    //   - Round 3: receives losers from winners round 2 (created when wRound=2)
-    //   - Round 5: receives losers from winners round 3 (created when wRound=3)
-    // Pattern: Winners Round N → Losers Round (2*N - 1) for N >= 1, Round 0 → Round 0
+    // For WR0 with bye handling:
+    // - If hasLR0Bye and this is the bye recipient (last actual loser), send to LR1
+    // - Otherwise, send to LR0
+    // For later rounds: Winners Round N → Losers Round (2*N - 1) for N >= 1
     
     let losersRoundIndex;
     if (winnersRound === 0) {
-      losersRoundIndex = 0;
+      // Check if this loser should get a bye (skip LR0, go directly to LR1)
+      // The bye goes to the loser from the highest-numbered WR0 match with a real opponent
+      if (byeInfo && byeInfo.hasLR0Bye) {
+        // Calculate which WR0 match number should get the bye
+        // The bye recipient is the loser from WR0 match with matchNum = numActualLosersFromWR0
+        // (e.g., for 6 players with 3 actual losers, the loser from match 3 gets the bye)
+        if (match.matchNum === byeInfo.numActualLosersFromWR0) {
+          // This loser gets a bye - send directly to LR1
+          losersRoundIndex = 1;
+          console.log(`Bye: Loser ${loser} from WR0 match ${match.matchNum} bypasses LR0, going to LR1`);
+        } else {
+          losersRoundIndex = 0;
+        }
+      } else {
+        losersRoundIndex = 0;
+      }
     } else {
       // For winners round N (N >= 1), losers go to losers round (2*N - 1)
       losersRoundIndex = (winnersRound * 2) - 1;
@@ -984,8 +1288,8 @@ class Tournament {
     }
     
     // Find an available match in this round
-    if (winnersRound === 0) {
-      // For round 0, pair losers from adjacent winners matches
+    if (winnersRound === 0 && losersRoundIndex === 0) {
+      // For LR0, pair losers from adjacent winners matches
       // Match 1&2 → losers match 1, Match 3&4 → losers match 2, etc.
       const matchIndex = Math.floor((match.matchNum - 1) / 2);
       if (matchIndex >= 0 && matchIndex < targetLosersRound.length) {
@@ -1000,16 +1304,50 @@ class Tournament {
         } else if (targetMatch.player2 === 'TBD') {
           targetMatch.player2 = loser;
         }
+      } else {
+        // Fallback for LR0
+        for (const m of targetLosersRound) {
+          if (m.player1 === 'TBD') {
+            m.player1 = loser;
+            break;
+          } else if (m.player2 === 'TBD') {
+            m.player2 = loser;
+            break;
+          }
+        }
+      }
+    } else if (winnersRound === 0 && losersRoundIndex === 1) {
+      // Bye recipient going directly to LR1
+      // Place in player1 slot (they're the "seed" coming in with the bye)
+      // Find the last available match in LR1 for the bye recipient
+      const numLR0Matches = losersRounds[0].length;
+      // The bye recipient should go to the match after where LR0 winners go
+      // If LR0 has N matches, LR1 should have N+1 players coming in (N winners + 1 bye)
+      // So the bye recipient goes to the last slot
+      const targetMatchIndex = numLR0Matches; // 0-indexed, so this is match numLR0Matches+1
+      if (targetMatchIndex < targetLosersRound.length) {
+        const targetMatch = targetLosersRound[targetMatchIndex];
+        if (targetMatch.player1 === 'TBD') {
+          targetMatch.player1 = loser;
+        } else if (targetMatch.player2 === 'TBD') {
+          targetMatch.player2 = loser;
+        }
+      } else {
+        // Fallback: find any available slot in LR1
+        for (const m of targetLosersRound) {
+          if (m.player1 === 'TBD') {
+            m.player1 = loser;
+            break;
+          } else if (m.player2 === 'TBD') {
+            m.player2 = loser;
+            break;
+          }
+        }
       }
     } else {
-      // For later rounds (semifinals, finals), use 1:1 mapping
+      // For later rounds (WR1+), use match index mapping
       // WR match N loser → LR match N (same index)
       // The WB loser goes to player2 because player1 is the LB winner from previous round
-      // 
-      // Example for 8 players:
-      // - WR1 match 1 loser → LR1 match 1, player2
-      // - WR1 match 2 loser → LR1 match 2, player2
-      // - WR2 match 1 loser → LR3 match 1, player2
       
       const matchIndex = match.matchNum - 1;
       
@@ -1144,6 +1482,10 @@ class Tournament {
       processMatches(this.currentTournament.bracket.winners.rounds);
     } else {
       processMatches(this.currentTournament.bracket.rounds);
+      // Include consolation bracket matches if exists
+      if (this.currentTournament.bracket.consolation?.rounds) {
+        processMatches(this.currentTournament.bracket.consolation.rounds);
+      }
     }
 
     return Object.entries(stats)
@@ -1153,6 +1495,186 @@ class Tournament {
         winRate: stat.matches > 0 ? ((stat.wins / stat.matches) * 100).toFixed(1) : 0
       }))
       .sort((a, b) => b.wins - a.wins || b.winRate - a.winRate);
+  }
+
+  // Get matches that are ready to be played (both players determined, no winner yet)
+  getNowPlayingMatches() {
+    if (!this.currentTournament) return null;
+
+    const result = {
+      winners: [],
+      losers: [],
+      grandFinal: null,
+      grandFinal2: null,
+      consolation: [],
+      roundRobin: []
+    };
+
+    const findReadyMatches = (rounds, bracketType = 'winners') => {
+      const ready = [];
+      if (!rounds) return ready;
+      
+      for (const round of rounds) {
+        for (const match of round) {
+          // Match is ready if both players are determined and no winner yet
+          const player1Ready = match.player1 && match.player1 !== 'TBD';
+          const player2Ready = match.player2 && match.player2 !== 'TBD' && match.player2 !== 'BYE';
+          const notFinished = !match.winner;
+          
+          if (player1Ready && player2Ready && notFinished) {
+            ready.push({
+              ...match,
+              bracketType
+            });
+          }
+        }
+      }
+      return ready;
+    };
+
+    const bracket = this.currentTournament.bracket;
+
+    if (bracket.type === 'round-robin') {
+      result.roundRobin = findReadyMatches(bracket.rounds, 'round-robin');
+    } else if (bracket.type === 'double-elimination') {
+      result.winners = findReadyMatches(bracket.winners?.rounds, 'winners');
+      result.losers = findReadyMatches(bracket.losers?.rounds, 'losers');
+      
+      // Check grand final
+      if (bracket.grandFinal && bracket.grandFinal[0]) {
+        const gf = bracket.grandFinal[0];
+        if (gf.player1 && gf.player1 !== 'TBD' && gf.player2 && gf.player2 !== 'TBD' && !gf.winner) {
+          result.grandFinal = gf;
+        }
+      }
+      // Check grand final 2
+      if (bracket.grandFinal2 && bracket.grandFinal2[0]) {
+        const gf2 = bracket.grandFinal2[0];
+        if (gf2.player1 && gf2.player1 !== 'TBD' && gf2.player2 && gf2.player2 !== 'TBD' && !gf2.winner) {
+          result.grandFinal2 = gf2;
+        }
+      }
+    } else {
+      // Single elimination
+      result.winners = findReadyMatches(bracket.rounds, 'winners');
+      
+      // Check consolation bracket
+      if (bracket.consolation?.rounds) {
+        result.consolation = findReadyMatches(bracket.consolation.rounds, 'consolation');
+      }
+    }
+
+    return result;
+  }
+
+  // Render the "Now Playing" section
+  renderNowPlaying() {
+    const nowPlaying = this.getNowPlayingMatches();
+    if (!nowPlaying) return '';
+
+    const hasWinners = nowPlaying.winners.length > 0;
+    const hasLosers = nowPlaying.losers.length > 0;
+    const hasGrandFinal = nowPlaying.grandFinal !== null;
+    const hasGrandFinal2 = nowPlaying.grandFinal2 !== null;
+    const hasConsolation = nowPlaying.consolation.length > 0;
+    const hasRoundRobin = nowPlaying.roundRobin.length > 0;
+    
+    const hasAnyMatches = hasWinners || hasLosers || hasGrandFinal || hasGrandFinal2 || hasConsolation || hasRoundRobin;
+    
+    if (!hasAnyMatches) {
+      return '';
+    }
+
+    const renderMatchPill = (match, label = '') => {
+      const escapedPlayer1 = this.escapeForAttr(match.player1);
+      const escapedPlayer2 = this.escapeForAttr(match.player2);
+      return `
+        <div class="now-playing-match">
+          ${label ? `<span class="now-playing-label">${label}</span>` : ''}
+          <span class="now-playing-player">${escapedPlayer1}</span>
+          <span class="now-playing-vs">vs</span>
+          <span class="now-playing-player">${escapedPlayer2}</span>
+        </div>
+      `;
+    };
+
+    let html = '<div class="now-playing-container">';
+    html += '<div class="now-playing-header">🎮 Now Playing</div>';
+    html += '<div class="now-playing-brackets">';
+
+    // Grand Final 2 (highest priority)
+    if (hasGrandFinal2) {
+      html += `
+        <div class="now-playing-section grand-final">
+          <div class="now-playing-section-title">⭐ Grand Final 2</div>
+          <div class="now-playing-matches">
+            ${renderMatchPill(nowPlaying.grandFinal2)}
+          </div>
+        </div>
+      `;
+    }
+    // Grand Final
+    else if (hasGrandFinal) {
+      html += `
+        <div class="now-playing-section grand-final">
+          <div class="now-playing-section-title">⭐ Grand Final</div>
+          <div class="now-playing-matches">
+            ${renderMatchPill(nowPlaying.grandFinal)}
+          </div>
+        </div>
+      `;
+    }
+
+    // Winners Bracket
+    if (hasWinners) {
+      html += `
+        <div class="now-playing-section winners">
+          <div class="now-playing-section-title">🏆 Winners Bracket</div>
+          <div class="now-playing-matches">
+            ${nowPlaying.winners.map(m => renderMatchPill(m)).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    // Losers Bracket
+    if (hasLosers) {
+      html += `
+        <div class="now-playing-section losers">
+          <div class="now-playing-section-title">💀 Losers Bracket</div>
+          <div class="now-playing-matches">
+            ${nowPlaying.losers.map(m => renderMatchPill(m)).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    // Consolation Bracket
+    if (hasConsolation) {
+      html += `
+        <div class="now-playing-section consolation">
+          <div class="now-playing-section-title">🥉 Placement Matches</div>
+          <div class="now-playing-matches">
+            ${nowPlaying.consolation.map(m => renderMatchPill(m, m.placementFor || '')).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    // Round Robin
+    if (hasRoundRobin) {
+      html += `
+        <div class="now-playing-section round-robin">
+          <div class="now-playing-section-title">🔄 Round Robin</div>
+          <div class="now-playing-matches">
+            ${nowPlaying.roundRobin.map(m => renderMatchPill(m)).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    html += '</div></div>';
+    return html;
   }
 
   getTournamentProgress() {
@@ -1192,6 +1714,10 @@ class Tournament {
       processMatches(this.currentTournament.bracket.winners.rounds);
     } else {
       processMatches(this.currentTournament.bracket.rounds);
+      // Include consolation bracket matches if exists
+      if (this.currentTournament.bracket.consolation?.rounds) {
+        processMatches(this.currentTournament.bracket.consolation.rounds);
+      }
     }
 
     return {
@@ -1426,7 +1952,68 @@ class Tournament {
       return this.renderDoubleEliminationBracket(bracket);
     }
 
-    return this.renderVisualBracket(bracket);
+    // Single elimination (possibly with consolation)
+    let html = this.renderVisualBracket(bracket);
+    
+    if (bracket.consolation?.rounds) {
+      html += this.renderConsolationBracket(bracket.consolation);
+    }
+    
+    return html;
+  }
+
+  renderConsolationBracket(consolation) {
+    if (!consolation?.rounds || consolation.rounds.length === 0) return '';
+    
+    let html = '<div class="consolation-bracket-container">';
+    html += '<h3 class="bracket-section-title consolation-title">🏆 Placement Matches</h3>';
+    html += '<div class="consolation-bracket">';
+    
+    consolation.rounds.forEach((round, roundIdx) => {
+      const label = consolation.placementLabels[roundIdx] || `Placement Round ${roundIdx + 1}`;
+      
+      html += `
+        <div class="consolation-round">
+          <div class="consolation-round-label">${label}</div>
+          <div class="consolation-matches">
+      `;
+      
+      round.forEach(match => {
+        const player1Determined = match.player1 !== 'TBD' && match.player1 !== null;
+        const player2Determined = match.player2 !== 'TBD' && match.player2 !== null && match.player2 !== 'BYE';
+        const canClickPlayer1 = player1Determined && !match.winner;
+        const canClickPlayer2 = player2Determined && !match.winner;
+        
+        const escapedPlayer1 = this.escapeForAttr(match.player1);
+        const escapedPlayer2 = this.escapeForAttr(match.player2);
+        
+        const cursorStyle1 = canClickPlayer1 ? 'cursor: pointer;' : 'cursor: default; opacity: 0.6;';
+        const cursorStyle2 = canClickPlayer2 ? 'cursor: pointer;' : 'cursor: default; opacity: 0.6;';
+        
+        html += `
+          <div class="bracket-match consolation-match ${match.isPlacementFinal ? 'placement-final' : ''}">
+            ${match.placementFor ? `<div class="match-placement-label">${match.placementFor}</div>` : ''}
+            <div class="bracket-player ${match.winner === match.player1 ? 'winner' : ''}" 
+                 data-match-id="${match.id}" data-player-index="0" ${canClickPlayer1 ? 'data-clickable="true"' : ''} style="${cursorStyle1}">
+              ${escapedPlayer1 || 'TBD'}
+            </div>
+            <div class="bracket-vs">vs</div>
+            <div class="bracket-player ${match.winner === match.player2 ? 'winner' : ''}" 
+                 data-match-id="${match.id}" data-player-index="1" ${canClickPlayer2 ? 'data-clickable="true"' : ''} style="${cursorStyle2}">
+              ${escapedPlayer2 || 'TBD'}
+            </div>
+          </div>
+        `;
+      });
+      
+      html += `
+          </div>
+        </div>
+      `;
+    });
+    
+    html += '</div></div>';
+    return html;
   }
 
   renderDoubleEliminationBracket(bracket) {
@@ -1562,6 +2149,7 @@ class Tournament {
               <span class="tournament-type">${this.currentTournament.type}</span>
               <span class="tournament-badge ${gameMode}">${gameMode === 'doubles' ? 'Doubles' : 'Singles'}</span>
               <span class="tournament-badge ${seedingMode}">${seedingMode === 'ranked' ? 'Ranked' : 'Random'}</span>
+              ${this.currentTournament.hasConsolation ? '<span class="tournament-badge consolation">Consolation</span>' : ''}
             </div>
           </div>
           <div class="tournament-header-actions">
@@ -1581,6 +2169,8 @@ class Tournament {
             <h3>${this.currentTournament.bracket.type === 'round-robin' ? 'Current Leader' : 'Winner'}: ${winner}</h3>
           </div>
         ` : ''}
+
+        ${this.renderNowPlaying()}
 
         ${this.viewMode === 'stats' ? `
           <div class="tournament-stats-view">
@@ -1697,6 +2287,15 @@ class Tournament {
             </div>
           </div>
 
+          <!-- Consolation Bracket Option (only for single elimination) -->
+          <div id="consolation-option-container" class="form-group consolation-option">
+            <label class="checkbox-label">
+              <input type="checkbox" id="consolation-bracket" name="consolation-bracket">
+              <span class="checkbox-text">Enable Consolation Bracket</span>
+            </label>
+            <p class="form-help-text">Adds placement matches for 3rd place, 5th/6th place, etc.</p>
+          </div>
+
           <div class="form-group">
             <label for="participants">Add Participants</label>
             <div class="participant-input-group">
@@ -1754,6 +2353,7 @@ class Tournament {
                         <div class="tournament-card-badges">
                           ${gameMode === 'doubles' ? '<span class="badge badge-doubles">Doubles</span>' : ''}
                           ${seedingMode === 'ranked' ? '<span class="badge badge-ranked">Ranked</span>' : ''}
+                          ${t.hasConsolation ? '<span class="badge badge-consolation">Consolation</span>' : ''}
                         </div>
                       </div>
                       ${total > 0 ? `<div class="tournament-progress-bar"><div class="tournament-progress-fill" style="width: ${percentage}%"></div></div>` : ''}
