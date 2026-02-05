@@ -2,12 +2,14 @@
 class GymLog {
   constructor() {
     this.workouts = [];
+    this.templates = [];
     this.currentFilter = 'all';
-    this.viewMode = 'list'; // 'list' or 'analytics'
+    this.viewMode = 'list'; // 'list', 'analytics', or 'templates'
     this.selectedExercise = null;
     this.selectedCategory = null;
     this.charts = {};
     this.editingWorkoutId = null;
+    this.editingTemplateId = null;
     
     // Predefined list of common exercises
     this.commonExercises = [
@@ -55,8 +57,27 @@ class GymLog {
 
   async init() {
     await this.loadWorkouts();
+    await this.loadTemplates();
     this.render();
     this.setupEventListeners();
+  }
+
+  async loadTemplates() {
+    try {
+      const data = localStorage.getItem('gym-log-templates');
+      this.templates = data ? JSON.parse(data) : [];
+    } catch (error) {
+      console.error('Error loading templates:', error);
+      this.templates = [];
+    }
+  }
+
+  async saveTemplates() {
+    try {
+      localStorage.setItem('gym-log-templates', JSON.stringify(this.templates));
+    } catch (error) {
+      console.error('Error saving templates:', error);
+    }
   }
 
   async loadWorkouts() {
@@ -234,7 +255,25 @@ class GymLog {
       }
       this.editingWorkoutId = null;
       await this.loadWorkouts();
+      
+      // If using a template, advance to next exercise
+      if (this.activeTemplate) {
+        this.templateExerciseIndex++;
+        if (this.templateExerciseIndex >= this.activeTemplate.exercises.length) {
+          this.activeTemplate = null;
+          this.templateExerciseIndex = 0;
+          this.showMessage('Template completed! 🎉 All exercises logged.', 'success');
+        }
+      }
+      
       this.render();
+      
+      // Pre-fill next template exercise if still active
+      if (this.activeTemplate) {
+        setTimeout(() => {
+          this.prefillFormWithTemplateExercise(this.templateExerciseIndex);
+        }, 100);
+      }
     } catch (error) {
       console.error('Error saving workout:', error);
       this.showMessage('Error saving workout. Please try again.', 'error');
@@ -740,6 +779,386 @@ class GymLog {
     URL.revokeObjectURL(url);
   }
 
+  // Template Management Methods
+  async createTemplate(templateData) {
+    const template = {
+      id: Date.now().toString(),
+      name: templateData.name,
+      description: templateData.description || '',
+      exercises: templateData.exercises || [],
+      createdAt: new Date().toISOString()
+    };
+    
+    this.templates.push(template);
+    await this.saveTemplates();
+    this.showMessage('Template created!', 'success');
+    this.render();
+  }
+
+  async updateTemplate(id, updates) {
+    const templateIndex = this.templates.findIndex(t => t.id === id);
+    if (templateIndex === -1) return;
+    
+    this.templates[templateIndex] = {
+      ...this.templates[templateIndex],
+      ...updates,
+      updatedAt: new Date().toISOString()
+    };
+    
+    await this.saveTemplates();
+    this.editingTemplateId = null;
+    this.showMessage('Template updated!', 'success');
+    this.render();
+  }
+
+  async deleteTemplate(id) {
+    if (!confirm('Delete this template?')) return;
+    
+    this.templates = this.templates.filter(t => t.id !== id);
+    await this.saveTemplates();
+    this.showMessage('Template deleted.', 'success');
+    this.render();
+  }
+
+  applyTemplate(id) {
+    const template = this.templates.find(t => t.id === id);
+    if (!template || !template.exercises || template.exercises.length === 0) {
+      this.showMessage('Template has no exercises.', 'error');
+      return;
+    }
+    
+    // Store template for sequential logging
+    this.activeTemplate = template;
+    this.templateExerciseIndex = 0;
+    
+    // Switch to list view and pre-fill the first exercise
+    this.viewMode = 'list';
+    this.render();
+    
+    // Pre-fill the form with the first exercise
+    this.prefillFormWithTemplateExercise(0);
+    this.showMessage(`Loaded template: ${template.name}. Log each exercise!`, 'success');
+  }
+
+  prefillFormWithTemplateExercise(index) {
+    if (!this.activeTemplate || index >= this.activeTemplate.exercises.length) {
+      // Template completed
+      this.activeTemplate = null;
+      this.templateExerciseIndex = 0;
+      this.showMessage('Template completed! 🎉', 'success');
+      return;
+    }
+
+    const exercise = this.activeTemplate.exercises[index];
+    const form = document.getElementById('gym-log-form');
+    if (!form) return;
+
+    // Set the date to today
+    form.elements.date.value = new Date().toISOString().split('T')[0];
+
+    // Set category
+    if (exercise.category && form.elements.category) {
+      form.elements.category.value = exercise.category;
+    }
+
+    // Set exercise
+    const normalizedExercise = this.normalizeExerciseName(exercise.exercise);
+    const isCommonExercise = this.commonExercises.some(ex => 
+      this.normalizeExerciseName(ex) === normalizedExercise
+    );
+    
+    if (isCommonExercise) {
+      const matchingExercise = this.commonExercises.find(ex => 
+        this.normalizeExerciseName(ex) === normalizedExercise
+      );
+      form.elements.exercise.value = matchingExercise;
+      const customInput = document.getElementById('exercise-custom');
+      if (customInput) {
+        customInput.style.display = 'none';
+        customInput.required = false;
+      }
+    } else {
+      form.elements.exercise.value = 'custom';
+      const customInput = document.getElementById('exercise-custom');
+      if (customInput) {
+        customInput.value = exercise.exercise;
+        customInput.style.display = 'block';
+        customInput.required = true;
+      }
+    }
+
+    // Set sets, reps, weight
+    form.elements.sets.value = exercise.sets || 3;
+    form.elements.reps.value = exercise.reps || '';
+    form.elements.weight.value = exercise.weight || '';
+    form.elements.notes.value = exercise.notes || '';
+
+    // Scroll to form
+    form.scrollIntoView({ behavior: 'smooth' });
+  }
+
+  advanceTemplateExercise() {
+    if (!this.activeTemplate) return;
+    
+    this.templateExerciseIndex++;
+    this.prefillFormWithTemplateExercise(this.templateExerciseIndex);
+  }
+
+  cancelTemplate() {
+    this.activeTemplate = null;
+    this.templateExerciseIndex = 0;
+    this.render();
+  }
+
+  saveCurrentWorkoutAsTemplate() {
+    // Get recent workouts from today for template
+    const today = new Date().toISOString().split('T')[0];
+    const todayWorkouts = this.workouts.filter(w => w.date === today);
+    
+    if (todayWorkouts.length === 0) {
+      this.showMessage('No workouts logged today to save as template.', 'error');
+      return;
+    }
+
+    const templateName = prompt('Enter a name for this template (e.g., "Push Day", "Leg Day"):');
+    if (!templateName) return;
+
+    const exercises = todayWorkouts.map(w => ({
+      exercise: w.exercise,
+      exerciseNormalized: w.exerciseNormalized,
+      category: w.category,
+      sets: w.sets,
+      reps: w.reps,
+      weight: w.weight,
+      notes: w.notes || ''
+    }));
+
+    this.createTemplate({
+      name: templateName,
+      description: `Created from ${today} workout (${exercises.length} exercises)`,
+      exercises: exercises
+    });
+  }
+
+  editTemplate(id) {
+    this.editingTemplateId = id;
+    this.render();
+  }
+
+  renderTemplatesView() {
+    const editingTemplate = this.editingTemplateId 
+      ? this.templates.find(t => t.id === this.editingTemplateId) 
+      : null;
+
+    return `
+      <div class="templates-container">
+        ${editingTemplate ? this.renderTemplateEditor(editingTemplate) : this.renderTemplateForm()}
+        
+        <div class="templates-list">
+          <h3>Your Workout Templates</h3>
+          ${this.templates.length === 0 ? `
+            <div class="empty-state">
+              <p>No templates yet. Create one above or save today's workout as a template!</p>
+            </div>
+          ` : `
+            <div class="templates-grid">
+              ${this.templates.map(template => `
+                <div class="template-card">
+                  <div class="template-header">
+                    <h4>${template.name}</h4>
+                    <div class="template-actions">
+                      <button class="btn-icon" onclick="gymLog.editTemplate('${template.id}')" title="Edit">✏️</button>
+                      <button class="btn-icon" onclick="gymLog.deleteTemplate('${template.id}')" title="Delete">×</button>
+                    </div>
+                  </div>
+                  ${template.description ? `<p class="template-description">${template.description}</p>` : ''}
+                  <div class="template-exercises">
+                    ${template.exercises.map((ex, idx) => `
+                      <div class="template-exercise-item">
+                        <span class="exercise-num">${idx + 1}</span>
+                        <span class="exercise-name">${ex.exercise}</span>
+                        <span class="exercise-details">${ex.sets}×${ex.reps} @ ${ex.weight}lbs</span>
+                      </div>
+                    `).join('')}
+                  </div>
+                  <div class="template-footer">
+                    <span class="template-meta">${template.exercises.length} exercises</span>
+                    <button class="btn primary" onclick="gymLog.applyTemplate('${template.id}')">Use Template</button>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          `}
+        </div>
+      </div>
+    `;
+  }
+
+  renderTemplateForm() {
+    return `
+      <div class="template-form-container">
+        <h3>Create New Template</h3>
+        <form id="template-form" class="gym-log-form">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="template-name">Template Name</label>
+              <input type="text" id="template-name" name="templateName" placeholder="e.g., Push Day, Leg Day" required>
+            </div>
+            <div class="form-group">
+              <label for="template-description">Description (optional)</label>
+              <input type="text" id="template-description" name="templateDescription" placeholder="Brief description">
+            </div>
+          </div>
+          
+          <div class="template-exercises-builder" id="template-exercises-builder">
+            <h4>Exercises</h4>
+            <div id="template-exercise-list"></div>
+            <button type="button" class="btn" onclick="gymLog.addTemplateExerciseRow()">+ Add Exercise</button>
+          </div>
+          
+          <div class="form-actions" style="margin-top: 16px; display: flex; gap: 12px;">
+            <button type="submit" class="btn primary">Create Template</button>
+            <button type="button" class="btn" onclick="gymLog.saveCurrentWorkoutAsTemplate()">Save Today's Workout as Template</button>
+          </div>
+        </form>
+      </div>
+    `;
+  }
+
+  renderTemplateEditor(template) {
+    return `
+      <div class="template-form-container">
+        <h3>Edit Template: ${template.name}</h3>
+        <form id="template-edit-form" class="gym-log-form">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="template-name">Template Name</label>
+              <input type="text" id="template-name" name="templateName" value="${template.name}" required>
+            </div>
+            <div class="form-group">
+              <label for="template-description">Description (optional)</label>
+              <input type="text" id="template-description" name="templateDescription" value="${template.description || ''}">
+            </div>
+          </div>
+          
+          <div class="template-exercises-builder" id="template-exercises-builder">
+            <h4>Exercises</h4>
+            <div id="template-exercise-list">
+              ${template.exercises.map((ex, idx) => this.renderTemplateExerciseRow(idx, ex)).join('')}
+            </div>
+            <button type="button" class="btn" onclick="gymLog.addTemplateExerciseRow()">+ Add Exercise</button>
+          </div>
+          
+          <div class="form-actions" style="margin-top: 16px; display: flex; gap: 12px;">
+            <button type="submit" class="btn primary">Save Changes</button>
+            <button type="button" class="btn" onclick="gymLog.editingTemplateId = null; gymLog.render();">Cancel</button>
+          </div>
+        </form>
+      </div>
+    `;
+  }
+
+  renderTemplateExerciseRow(index, exercise = null) {
+    return `
+      <div class="template-exercise-row" data-index="${index}">
+        <select name="exercise-${index}" class="template-exercise-select" required>
+          <option value="">Select exercise...</option>
+          ${this.commonExercises.map(ex => `
+            <option value="${ex}" ${exercise && this.normalizeExerciseName(ex) === this.normalizeExerciseName(exercise.exercise) ? 'selected' : ''}>${ex}</option>
+          `).join('')}
+          <option value="custom" ${exercise && !this.commonExercises.some(ex => this.normalizeExerciseName(ex) === this.normalizeExerciseName(exercise.exercise)) ? 'selected' : ''}>Custom...</option>
+        </select>
+        <input type="text" name="exercise-custom-${index}" class="template-exercise-custom" placeholder="Custom exercise" 
+               value="${exercise && !this.commonExercises.some(ex => this.normalizeExerciseName(ex) === this.normalizeExerciseName(exercise.exercise)) ? exercise.exercise : ''}"
+               style="display: ${exercise && !this.commonExercises.some(ex => this.normalizeExerciseName(ex) === this.normalizeExerciseName(exercise.exercise)) ? 'block' : 'none'}">
+        <select name="category-${index}" class="template-category-select">
+          ${this.categories.map(cat => `<option value="${cat}" ${exercise && exercise.category === cat ? 'selected' : ''}>${cat}</option>`).join('')}
+        </select>
+        <input type="number" name="sets-${index}" placeholder="Sets" min="1" value="${exercise?.sets || 3}" required class="template-sets-input">
+        <input type="number" name="reps-${index}" placeholder="Reps" min="1" value="${exercise?.reps || ''}" required class="template-reps-input">
+        <input type="number" name="weight-${index}" placeholder="Weight" min="0" step="0.5" value="${exercise?.weight || ''}" class="template-weight-input">
+        <button type="button" class="btn-icon" onclick="this.closest('.template-exercise-row').remove()">×</button>
+      </div>
+    `;
+  }
+
+  addTemplateExerciseRow() {
+    const container = document.getElementById('template-exercise-list');
+    if (!container) return;
+    
+    const index = container.querySelectorAll('.template-exercise-row').length;
+    const row = document.createElement('div');
+    row.innerHTML = this.renderTemplateExerciseRow(index);
+    container.appendChild(row.firstElementChild);
+    
+    // Setup event listener for exercise select
+    const select = container.querySelector(`.template-exercise-row[data-index="${index}"] .template-exercise-select`);
+    if (select) {
+      select.addEventListener('change', (e) => {
+        const customInput = e.target.nextElementSibling;
+        if (customInput) {
+          customInput.style.display = e.target.value === 'custom' ? 'block' : 'none';
+          customInput.required = e.target.value === 'custom';
+        }
+      });
+    }
+  }
+
+  handleTemplateSubmit(e) {
+    e.preventDefault();
+    const form = e.target;
+    const formData = new FormData(form);
+    
+    const templateName = formData.get('templateName');
+    const templateDescription = formData.get('templateDescription');
+    
+    // Collect exercises
+    const exercises = [];
+    const rows = form.querySelectorAll('.template-exercise-row');
+    
+    rows.forEach((row, index) => {
+      let exerciseName = formData.get(`exercise-${index}`);
+      const customExercise = formData.get(`exercise-custom-${index}`);
+      
+      if (exerciseName === 'custom' && customExercise) {
+        exerciseName = customExercise;
+      }
+      
+      if (!exerciseName) return;
+      
+      exercises.push({
+        exercise: exerciseName,
+        exerciseNormalized: this.normalizeExerciseName(exerciseName),
+        category: formData.get(`category-${index}`) || 'Other',
+        sets: parseInt(formData.get(`sets-${index}`)) || 3,
+        reps: parseInt(formData.get(`reps-${index}`)) || 10,
+        weight: parseFloat(formData.get(`weight-${index}`)) || 0
+      });
+    });
+    
+    if (exercises.length === 0) {
+      this.showMessage('Please add at least one exercise to the template.', 'error');
+      return;
+    }
+    
+    if (this.editingTemplateId) {
+      this.updateTemplate(this.editingTemplateId, {
+        name: templateName,
+        description: templateDescription,
+        exercises: exercises
+      });
+    } else {
+      this.createTemplate({
+        name: templateName,
+        description: templateDescription,
+        exercises: exercises
+      });
+    }
+    
+    form.reset();
+    document.getElementById('template-exercise-list').innerHTML = '';
+  }
+
   showMessage(message, type = 'info') {
     const messageEl = document.getElementById('gym-log-message');
     if (messageEl) {
@@ -759,13 +1178,59 @@ class GymLog {
     const filtered = this.getFilteredWorkouts();
     const prs = this.getPersonalRecords();
 
+    if (this.viewMode === 'templates') {
+      container.innerHTML = `
+        <div class="gym-log-header">
+          <h2>Workout Templates</h2>
+          <div class="gym-log-actions">
+            <button class="btn ${this.viewMode === 'list' ? 'active' : ''}" data-view="list">List View</button>
+            <button class="btn ${this.viewMode === 'analytics' ? 'active' : ''}" data-view="analytics">Analytics</button>
+            <button class="btn ${this.viewMode === 'templates' ? 'active' : ''}" data-view="templates">Templates</button>
+            <button class="btn" id="export-workouts">Export Data</button>
+          </div>
+        </div>
+
+        <div id="gym-log-message" class="message" style="display:none;"></div>
+
+        ${this.renderTemplatesView()}
+      `;
+
+      this.setupEventListeners();
+      
+      // Setup template form submission
+      const templateForm = document.getElementById('template-form');
+      if (templateForm) {
+        templateForm.addEventListener('submit', (e) => this.handleTemplateSubmit(e));
+      }
+      
+      const templateEditForm = document.getElementById('template-edit-form');
+      if (templateEditForm) {
+        templateEditForm.addEventListener('submit', (e) => this.handleTemplateSubmit(e));
+      }
+      
+      // Setup exercise select listeners for custom input toggle
+      const selects = container.querySelectorAll('.template-exercise-select');
+      selects.forEach(select => {
+        select.addEventListener('change', (e) => {
+          const customInput = e.target.nextElementSibling;
+          if (customInput && customInput.classList.contains('template-exercise-custom')) {
+            customInput.style.display = e.target.value === 'custom' ? 'block' : 'none';
+            customInput.required = e.target.value === 'custom';
+          }
+        });
+      });
+      
+      return;
+    }
+
     if (this.viewMode === 'analytics') {
       container.innerHTML = `
         <div class="gym-log-header">
           <h2>Exercise Analytics</h2>
           <div class="gym-log-actions">
-            <button class="btn ${this.viewMode === 'analytics' ? 'active' : ''}" data-view="analytics">Analytics</button>
             <button class="btn ${this.viewMode === 'list' ? 'active' : ''}" data-view="list">List View</button>
+            <button class="btn ${this.viewMode === 'analytics' ? 'active' : ''}" data-view="analytics">Analytics</button>
+            <button class="btn ${this.viewMode === 'templates' ? 'active' : ''}" data-view="templates">Templates</button>
             <button class="btn" id="export-workouts">Export Data</button>
           </div>
         </div>
@@ -842,11 +1307,27 @@ class GymLog {
           <div class="gym-log-actions">
             <button class="btn ${this.viewMode === 'list' ? 'active' : ''}" data-view="list">List View</button>
             <button class="btn ${this.viewMode === 'analytics' ? 'active' : ''}" data-view="analytics">Analytics</button>
+            <button class="btn ${this.viewMode === 'templates' ? 'active' : ''}" data-view="templates">Templates</button>
             <button class="btn" id="export-workouts">Export Data</button>
           </div>
         </div>
 
         <div id="gym-log-message" class="message" style="display:none;"></div>
+
+        ${this.activeTemplate ? `
+          <div class="active-template-banner">
+            <div class="template-banner-content">
+              <span class="template-banner-icon">📋</span>
+              <div class="template-banner-info">
+                <strong>Using Template: ${this.activeTemplate.name}</strong>
+                <span>Exercise ${this.templateExerciseIndex + 1} of ${this.activeTemplate.exercises.length}</span>
+              </div>
+            </div>
+            <div class="template-banner-actions">
+              <button class="btn" onclick="gymLog.cancelTemplate()">Cancel Template</button>
+            </div>
+          </div>
+        ` : ''}
 
         <form id="gym-log-form" class="gym-log-form">
           <div class="form-row">

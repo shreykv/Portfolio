@@ -159,14 +159,161 @@
     // Initialize app after authentication
     function initializeApp() {
       // Register routes (using hash-based routing)
-      router.register('/personal', () => {
+      router.register('/personal', async () => {
         const appContent = document.getElementById('app-content');
+        
+        // Load data from all mini sites for dashboard stats
+        const dashboardStats = await loadDashboardStats();
+        
         appContent.innerHTML = `
           <section class="personal-landing">
             <header class="personal-landing-header">
               <h1>Personal Dashboard</h1>
-              <p>Choose a mini app to get started.</p>
+              <p>Your productivity hub at a glance</p>
             </header>
+            
+            <!-- Quick Stats Overview -->
+            <div class="dashboard-overview">
+              <div class="dashboard-stats-row">
+                ${dashboardStats.gymLog.totalWorkouts > 0 ? `
+                  <div class="dashboard-stat-card gym-stat" onclick="router.navigate('#/personal/gym-log')">
+                    <div class="stat-icon">🏋️</div>
+                    <div class="stat-info">
+                      <span class="stat-number">${dashboardStats.gymLog.totalWorkouts}</span>
+                      <span class="stat-label">Workouts</span>
+                    </div>
+                    <div class="stat-detail">
+                      ${dashboardStats.gymLog.thisWeek > 0 ? `<span class="stat-highlight">${dashboardStats.gymLog.thisWeek} this week</span>` : '<span class="stat-muted">Start today!</span>'}
+                    </div>
+                  </div>
+                ` : `
+                  <div class="dashboard-stat-card gym-stat empty" onclick="router.navigate('#/personal/gym-log')">
+                    <div class="stat-icon">🏋️</div>
+                    <div class="stat-info">
+                      <span class="stat-number">0</span>
+                      <span class="stat-label">Workouts</span>
+                    </div>
+                    <div class="stat-detail"><span class="stat-muted">Start logging!</span></div>
+                  </div>
+                `}
+                
+                ${dashboardStats.focusTimer.totalSessions > 0 ? `
+                  <div class="dashboard-stat-card focus-stat" onclick="router.navigate('#/personal/focus-timer')">
+                    <div class="stat-icon">⏱️</div>
+                    <div class="stat-info">
+                      <span class="stat-number">${dashboardStats.focusTimer.todayFormatted}</span>
+                      <span class="stat-label">Focus Today</span>
+                    </div>
+                    <div class="stat-detail">
+                      <span class="stat-highlight">${dashboardStats.focusTimer.activeTasks} active tasks</span>
+                    </div>
+                  </div>
+                ` : `
+                  <div class="dashboard-stat-card focus-stat empty" onclick="router.navigate('#/personal/focus-timer')">
+                    <div class="stat-icon">⏱️</div>
+                    <div class="stat-info">
+                      <span class="stat-number">0m</span>
+                      <span class="stat-label">Focus Today</span>
+                    </div>
+                    <div class="stat-detail"><span class="stat-muted">Start focusing!</span></div>
+                  </div>
+                `}
+                
+                ${dashboardStats.counters.total > 0 ? `
+                  <div class="dashboard-stat-card counter-stat" onclick="router.navigate('#/personal/counter')">
+                    <div class="stat-icon">🔢</div>
+                    <div class="stat-info">
+                      <span class="stat-number">${dashboardStats.counters.total}</span>
+                      <span class="stat-label">Counters</span>
+                    </div>
+                    <div class="stat-detail">
+                      ${dashboardStats.counters.goalsCompleted > 0 ? `<span class="stat-highlight">${dashboardStats.counters.goalsCompleted} goals hit! 🎉</span>` : '<span class="stat-muted">Keep counting!</span>'}
+                    </div>
+                  </div>
+                ` : `
+                  <div class="dashboard-stat-card counter-stat empty" onclick="router.navigate('#/personal/counter')">
+                    <div class="stat-icon">🔢</div>
+                    <div class="stat-info">
+                      <span class="stat-number">0</span>
+                      <span class="stat-label">Counters</span>
+                    </div>
+                    <div class="stat-detail"><span class="stat-muted">Create one!</span></div>
+                  </div>
+                `}
+                
+                ${dashboardStats.tournaments.total > 0 ? `
+                  <div class="dashboard-stat-card tournament-stat" onclick="router.navigate('#/personal/tournament')">
+                    <div class="stat-icon">🏆</div>
+                    <div class="stat-info">
+                      <span class="stat-number">${dashboardStats.tournaments.total}</span>
+                      <span class="stat-label">Tournaments</span>
+                    </div>
+                    <div class="stat-detail">
+                      ${dashboardStats.tournaments.inProgress > 0 ? `<span class="stat-highlight">${dashboardStats.tournaments.inProgress} in progress</span>` : '<span class="stat-muted">All completed!</span>'}
+                    </div>
+                  </div>
+                ` : `
+                  <div class="dashboard-stat-card tournament-stat empty" onclick="router.navigate('#/personal/tournament')">
+                    <div class="stat-icon">🏆</div>
+                    <div class="stat-info">
+                      <span class="stat-number">0</span>
+                      <span class="stat-label">Tournaments</span>
+                    </div>
+                    <div class="stat-detail"><span class="stat-muted">Create one!</span></div>
+                  </div>
+                `}
+              </div>
+            </div>
+            
+            <!-- Activity Summary Section -->
+            <div class="dashboard-activity">
+              <h3 class="activity-title">📊 Quick Summary</h3>
+              <div class="activity-cards">
+                ${dashboardStats.gymLog.recentWorkout ? `
+                  <div class="activity-card">
+                    <div class="activity-header">
+                      <span class="activity-icon">🏋️</span>
+                      <span class="activity-type">Last Workout</span>
+                    </div>
+                    <div class="activity-content">
+                      <strong>${dashboardStats.gymLog.recentWorkout.exercise}</strong>
+                      <span class="activity-meta">${dashboardStats.gymLog.recentWorkout.sets}×${dashboardStats.gymLog.recentWorkout.reps} @ ${dashboardStats.gymLog.recentWorkout.weight} lbs</span>
+                      <span class="activity-time">${formatRelativeDate(dashboardStats.gymLog.recentWorkout.date)}</span>
+                    </div>
+                  </div>
+                ` : ''}
+                
+                ${dashboardStats.focusTimer.activeTasks > 0 ? `
+                  <div class="activity-card">
+                    <div class="activity-header">
+                      <span class="activity-icon">📋</span>
+                      <span class="activity-type">Tasks</span>
+                    </div>
+                    <div class="activity-content">
+                      <strong>${dashboardStats.focusTimer.activeTasks} active</strong>
+                      ${dashboardStats.focusTimer.overdueTasks > 0 ? `<span class="activity-warning">⚠️ ${dashboardStats.focusTimer.overdueTasks} overdue</span>` : ''}
+                      <span class="activity-meta">${dashboardStats.focusTimer.weeklyFormatted} this week</span>
+                    </div>
+                  </div>
+                ` : ''}
+                
+                ${dashboardStats.counters.topCounter ? `
+                  <div class="activity-card">
+                    <div class="activity-header">
+                      <span class="activity-icon">🔥</span>
+                      <span class="activity-type">Top Counter</span>
+                    </div>
+                    <div class="activity-content">
+                      <strong>${dashboardStats.counters.topCounter.name}</strong>
+                      <span class="activity-meta">${dashboardStats.counters.topCounter.value}${dashboardStats.counters.topCounter.goal ? ` / ${dashboardStats.counters.topCounter.goal}` : ''}</span>
+                    </div>
+                  </div>
+                ` : ''}
+              </div>
+            </div>
+
+            <!-- Mini App Cards -->
+            <h3 class="section-title">🚀 Quick Access</h3>
             <div class="personal-landing-grid">
               <button class="personal-landing-card" data-route="#/personal/gym-log" type="button">
                 <div class="card-icon">🏋️</div>
@@ -213,6 +360,119 @@
         
         updateActiveNav('nav-personal-home');
       });
+      
+      // Helper function to load dashboard stats from all mini sites
+      async function loadDashboardStats() {
+        const stats = {
+          gymLog: { totalWorkouts: 0, thisWeek: 0, recentWorkout: null },
+          focusTimer: { totalSessions: 0, todayTime: 0, todayFormatted: '0m', weeklyTime: 0, weeklyFormatted: '0m', activeTasks: 0, overdueTasks: 0 },
+          counters: { total: 0, totalValue: 0, goalsCompleted: 0, topCounter: null },
+          tournaments: { total: 0, inProgress: 0 }
+        };
+        
+        try {
+          // Load gym log data
+          const workouts = await api.getWorkouts();
+          if (workouts && workouts.length > 0) {
+            stats.gymLog.totalWorkouts = workouts.length;
+            
+            // Calculate workouts this week
+            const weekAgo = new Date();
+            weekAgo.setDate(weekAgo.getDate() - 7);
+            stats.gymLog.thisWeek = workouts.filter(w => new Date(w.date) >= weekAgo).length;
+            
+            // Get most recent workout
+            const sorted = [...workouts].sort((a, b) => new Date(b.date) - new Date(a.date));
+            stats.gymLog.recentWorkout = sorted[0];
+          }
+        } catch (e) { console.warn('Could not load gym stats:', e); }
+        
+        try {
+          // Load focus timer data
+          const focusData = await api.getFocusTimer();
+          if (focusData) {
+            const tasks = focusData.tasks || [];
+            const sessions = focusData.sessions || [];
+            
+            stats.focusTimer.totalSessions = sessions.length;
+            stats.focusTimer.activeTasks = tasks.filter(t => !t.completed).length;
+            stats.focusTimer.overdueTasks = tasks.filter(t => {
+              if (t.completed || !t.dueDate) return false;
+              return new Date(t.dueDate) < new Date();
+            }).length;
+            
+            // Calculate today's focus time
+            const todayStr = new Date().toISOString().split('T')[0];
+            const todaySessions = sessions.filter(s => {
+              const sessionDate = new Date(s.startTime).toISOString().split('T')[0];
+              return sessionDate === todayStr;
+            });
+            stats.focusTimer.todayTime = todaySessions.reduce((sum, s) => sum + s.duration, 0);
+            stats.focusTimer.todayFormatted = formatDuration(stats.focusTimer.todayTime);
+            
+            // Calculate weekly focus time
+            const weekAgo = new Date();
+            weekAgo.setDate(weekAgo.getDate() - 7);
+            const weeklySessions = sessions.filter(s => new Date(s.startTime) >= weekAgo);
+            stats.focusTimer.weeklyTime = weeklySessions.reduce((sum, s) => sum + s.duration, 0);
+            stats.focusTimer.weeklyFormatted = formatDuration(stats.focusTimer.weeklyTime);
+          }
+        } catch (e) { console.warn('Could not load focus timer stats:', e); }
+        
+        try {
+          // Load counter data
+          const counterData = await api.getCounters();
+          if (counterData && counterData.counters) {
+            const counters = counterData.counters;
+            stats.counters.total = counters.length;
+            stats.counters.totalValue = counters.reduce((sum, c) => sum + c.value, 0);
+            stats.counters.goalsCompleted = counters.filter(c => c.goal > 0 && c.value >= c.goal).length;
+            
+            // Find top counter by value
+            if (counters.length > 0) {
+              stats.counters.topCounter = counters.reduce((max, c) => c.value > (max?.value || 0) ? c : max, null);
+            }
+          }
+        } catch (e) { console.warn('Could not load counter stats:', e); }
+        
+        try {
+          // Load tournament data
+          const tournaments = await api.getTournaments();
+          if (tournaments && tournaments.length > 0) {
+            stats.tournaments.total = tournaments.length;
+            stats.tournaments.inProgress = tournaments.filter(t => !t.winner).length;
+          }
+        } catch (e) { console.warn('Could not load tournament stats:', e); }
+        
+        return stats;
+      }
+      
+      // Helper function to format duration in seconds
+      function formatDuration(seconds) {
+        const hours = Math.floor(seconds / 3600);
+        const mins = Math.floor((seconds % 3600) / 60);
+        
+        if (hours > 0) {
+          return `${hours}h ${mins}m`;
+        } else if (mins > 0) {
+          return `${mins}m`;
+        } else {
+          return '0m';
+        }
+      }
+      
+      // Helper function to format relative dates
+      function formatRelativeDate(dateStr) {
+        const date = new Date(dateStr);
+        const now = new Date();
+        const diffDays = Math.floor((now - date) / (1000 * 60 * 60 * 24));
+        
+        if (diffDays === 0) return 'Today';
+        if (diffDays === 1) return 'Yesterday';
+        if (diffDays < 7) return `${diffDays} days ago`;
+        if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
+        return date.toLocaleDateString();
+      }
 
       router.register('/personal/gym-log', () => {
         document.getElementById('app-content').innerHTML = '<div id="gym-log-content"></div>';
