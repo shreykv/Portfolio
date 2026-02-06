@@ -148,19 +148,56 @@
   border-color: rgba(110, 231, 255, 0.55);
 }
 
-/* Dropdown option styling for better readability */
+/* Dropdown styling for better readability */
+.form-group select,
+.sort-select,
+.date-selector,
+select.btn,
+select#category-selector,
+select#timer-task,
+select#focus-task-sort,
+select#task-sort {
+  color-scheme: dark;
+  background-color: #0d1117 !important;
+  background-image: none !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23ffffff' d='M6 8L1 3h10z'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 12px center !important;
+  padding-right: 32px;
+}
+
 .form-group select option,
 .sort-select option,
-.date-selector option {
-  background: rgba(0, 0, 0, 0.95);
-  color: var(--text);
-  padding: 8px 12px;
+.date-selector option,
+select.btn option,
+select#category-selector option,
+select#timer-task option,
+select#focus-task-sort option,
+select#task-sort option {
+  background-color: #1a1e2e;
+  color: #ffffff;
+  padding: 10px 12px;
+}
+
+.form-group select option:checked,
+.sort-select option:checked,
+.date-selector option:checked,
+select.btn option:checked,
+select#category-selector option:checked {
+  background-color: #2d3348;
+  color: #ffffff;
 }
 
 .form-group select option:hover,
 .sort-select option:hover,
-.date-selector option:hover {
-  background: rgba(110, 231, 255, 0.2);
+.date-selector option:hover,
+select.btn option:hover,
+select#category-selector option:hover {
+  background-color: rgba(110, 231, 255, 0.3);
 }
 
 /* Messages */
@@ -487,10 +524,16 @@
 .template-exercise-row input {
   padding: 10px;
   border-radius: 8px;
-  border: 1px solid var(--border);
-  background: rgba(0, 0, 0, 0.2);
-  color: var(--text);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: #0d1117;
+  color: #ffffff;
   font-size: 13px;
+  color-scheme: dark;
+}
+
+.template-exercise-row select option {
+  background-color: #1a1e2e;
+  color: #ffffff;
 }
 
 .template-exercise-custom {
