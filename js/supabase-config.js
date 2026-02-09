@@ -6,7 +6,7 @@
 // =============================================================================
 
 const SUPABASE_CONFIG = {
-  url: 'https://supabase.com/dashboard/project/wxdlgovtibygpigrleux',
+  url: 'https://wxdlgovtibygpigrleux.supabase.co',
   
   // Supabase anon (public) key (safe to expose - protected by RLS)
   anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind4ZGxnb3Z0aWJ5Z3BpZ3JsZXV4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAzNDMxNzAsImV4cCI6MjA4NTkxOTE3MH0.CjiUVWNGD2GJkX21BK1KBUKdPJ0FHVD82S8_38WwfVw',
