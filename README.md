@@ -53,17 +53,6 @@ Personal portfolio website for Shrey Vasisht with a password-protected personal 
 
 **Note**: For GitHub Pages, you may need to configure routing. Consider using a `404.html` file that redirects to handle client-side routing, or use hash-based routing instead of path-based routing.
 
-## Configuration
-
-### Password Protection
-
-The default password is set in `js/auth.js`:
-
-```javascript
-this.password = 'personal2024'; // Change this to your desired password
-```
-
-**Security Note**: Client-side password protection is for basic access control only. It is not secure for sensitive data. Anyone with access to the source code can see the password. For production use, consider implementing server-side authentication.
 
 ### Backend API Integration
 
