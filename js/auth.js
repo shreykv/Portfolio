@@ -9,8 +9,6 @@ class Auth {
   constructor() {
     // Session management
     this.sessionKey = 'personal_auth';
-    this.attemptsKey = 'auth_attempts';
-    this.maxAttempts = 5;
     this.lockoutTime = 5 * 60 * 1000; // 5 minutes in milliseconds
     
     // Current user (will be set after successful auth)
