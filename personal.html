@@ -60,21 +60,245 @@
       font-weight:700;
     }
     .btn.primary:hover{filter:saturate(1.05) brightness(1.02)}
+    .btn.secondary{
+      background: transparent;
+      border: 1px solid var(--accent);
+      color: var(--accent);
+    }
+    .btn:disabled{opacity:0.5; cursor: not-allowed; transform: none;}
+    
+    /* Auth Modal Styles */
+    .auth-modal{
+      position:fixed; inset:0; z-index:1000;
+      background: rgba(7,10,16,.95);
+      backdrop-filter: blur(20px);
+      display:flex; align-items:center; justify-content:center;
+      padding: 20px;
+    }
+    .auth-modal-content{
+      background: linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.04));
+      border: 1px solid rgba(255,255,255,.12);
+      border-radius: var(--radius2);
+      padding: 40px;
+      max-width: 420px;
+      width: 100%;
+      box-shadow: 0 20px 60px rgba(0,0,0,.5);
+    }
+    .auth-modal-content h2{
+      margin: 0 0 8px 0;
+      font-size: 1.8rem;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .auth-modal-content p{
+      margin: 0 0 24px 0;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+    .auth-tabs{
+      display: flex;
+      gap: 8px;
+      margin-bottom: 24px;
+    }
+    .auth-tab{
+      flex: 1;
+      padding: 12px;
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      font-family: var(--font);
+      font-size: 14px;
+      cursor: pointer;
+      border-radius: 10px;
+      transition: 0.2s;
+    }
+    .auth-tab:hover{ color: var(--text); }
+    .auth-tab.active{
+      background: var(--panel2);
+      color: var(--text);
+    }
+    .auth-form{
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .auth-form .form-group{
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .auth-form label{
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+    .auth-form input{
+      padding: 14px 16px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,.05);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 1rem;
+      transition: 0.2s;
+    }
+    .auth-form input:focus{
+      outline: none;
+      border-color: var(--accent);
+      background: rgba(255,255,255,.08);
+    }
+    .auth-form input::placeholder{
+      color: var(--muted2);
+    }
+    .auth-error{
+      padding: 12px;
+      border-radius: 10px;
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      color: #f87171;
+      font-size: 0.9rem;
+      display: none;
+    }
+    .auth-error.show{ display: block; }
+    .auth-success{
+      padding: 12px;
+      border-radius: 10px;
+      background: rgba(34, 197, 94, 0.1);
+      border: 1px solid rgba(34, 197, 94, 0.3);
+      color: #4ade80;
+      font-size: 0.9rem;
+      display: none;
+    }
+    .auth-success.show{ display: block; }
+    .auth-link{
+      color: var(--accent);
+      cursor: pointer;
+      font-size: 0.9rem;
+      text-align: center;
+      margin-top: 8px;
+    }
+    .auth-link:hover{ text-decoration: underline; }
+    .auth-divider{
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 16px 0;
+      color: var(--muted2);
+      font-size: 0.85rem;
+    }
+    .auth-divider::before,
+    .auth-divider::after{
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+    
+    /* Sync indicator */
+    .sync-indicator{
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      padding: 10px 16px;
+      border-radius: 10px;
+      background: var(--panel2);
+      border: 1px solid var(--border);
+      font-size: 0.85rem;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      z-index: 100;
+      animation: slideIn 0.3s ease;
+    }
+    .sync-indicator.success{ border-color: var(--ok); color: var(--ok); }
+    .sync-indicator.error{ border-color: var(--danger); color: var(--danger); }
+    @keyframes slideIn{
+      from{ transform: translateY(20px); opacity: 0; }
+      to{ transform: translateY(0); opacity: 1; }
+    }
+    
+    /* User info badge */
+    .user-badge{
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      border-radius: 10px;
+      background: var(--panel);
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+    .user-badge .user-email{
+      max-width: 150px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
   </style>
 </head>
 <body>
-  <!-- Password Modal -->
-  <div id="password-modal" class="password-modal" style="display: none;">
-    <div class="password-modal-content">
+  <!-- Auth Modal (Sign In / Sign Up) -->
+  <div id="auth-modal" class="auth-modal" style="display: none;">
+    <div class="auth-modal-content">
       <h2>Personal Access</h2>
-      <p>This area is password protected. Please enter the password to continue.</p>
-      <form id="password-form">
-        <div class="password-input-group">
-          <input type="password" id="password-input" placeholder="Enter password" required autofocus>
-          <button type="submit" class="btn primary">Enter</button>
+      <p>Sign in to sync your data across all devices.</p>
+      
+      <div class="auth-tabs">
+        <button class="auth-tab active" id="tab-signin" onclick="showAuthTab('signin')">Sign In</button>
+        <button class="auth-tab" id="tab-signup" onclick="showAuthTab('signup')">Sign Up</button>
+      </div>
+      
+      <!-- Sign In Form -->
+      <form id="signin-form" class="auth-form">
+        <div class="form-group">
+          <label for="signin-email">Email</label>
+          <input type="email" id="signin-email" placeholder="you@example.com" required>
         </div>
-        <div id="password-error" class="password-error"></div>
+        <div class="form-group">
+          <label for="signin-password">Password</label>
+          <input type="password" id="signin-password" placeholder="Your password" required>
+        </div>
+        <div id="signin-error" class="auth-error"></div>
+        <button type="submit" class="btn primary" style="width:100%; justify-content:center;">Sign In</button>
+        <div class="auth-link" onclick="showResetPassword()">Forgot password?</div>
       </form>
+      
+      <!-- Sign Up Form -->
+      <form id="signup-form" class="auth-form" style="display: none;">
+        <div class="form-group">
+          <label for="signup-email">Email</label>
+          <input type="email" id="signup-email" placeholder="you@example.com" required>
+        </div>
+        <div class="form-group">
+          <label for="signup-password">Password</label>
+          <input type="password" id="signup-password" placeholder="Create a password (min 6 characters)" minlength="6" required>
+        </div>
+        <div class="form-group">
+          <label for="signup-password-confirm">Confirm Password</label>
+          <input type="password" id="signup-password-confirm" placeholder="Confirm your password" minlength="6" required>
+        </div>
+        <div id="signup-error" class="auth-error"></div>
+        <div id="signup-success" class="auth-success"></div>
+        <button type="submit" class="btn primary" style="width:100%; justify-content:center;">Create Account</button>
+      </form>
+      
+      <!-- Reset Password Form -->
+      <form id="reset-form" class="auth-form" style="display: none;">
+        <div class="form-group">
+          <label for="reset-email">Email</label>
+          <input type="email" id="reset-email" placeholder="you@example.com" required>
+        </div>
+        <div id="reset-error" class="auth-error"></div>
+        <div id="reset-success" class="auth-success"></div>
+        <button type="submit" class="btn primary" style="width:100%; justify-content:center;">Send Reset Link</button>
+        <div class="auth-link" onclick="showAuthTab('signin')">← Back to Sign In</div>
+      </form>
+      
+      <!-- Legacy Password Form (fallback when Supabase not configured) -->
+      <div id="legacy-notice" style="display: none; margin-top: 16px; padding: 12px; background: var(--panel); border-radius: 10px; font-size: 0.85rem; color: var(--muted);">
+        <strong>Note:</strong> Cloud sync not configured. Data will be stored locally only.
+      </div>
     </div>
   </div>
 
@@ -92,7 +316,10 @@
         <a href="#" data-route="#/personal/counter" id="nav-counter">Counter</a>
         <a href="#" data-route="#/personal/focus-timer" id="nav-focus-timer">Focus Timer</a>
         <a href="/" class="btn">Back to Portfolio</a>
-        <button class="btn" onclick="auth.logout(); window.location.href='/personal';">Logout</button>
+        <span id="user-badge" class="user-badge" style="display:none;">
+          <span class="user-email"></span>
+        </span>
+        <button class="btn" id="logout-btn" onclick="handleLogout()">Logout</button>
       </div>
     </div>
   </nav>
@@ -107,7 +334,12 @@
   </div>
 
   <!-- Scripts -->
+  <!-- Supabase JS Library (CDN) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  
+  <!-- App Scripts -->
+  <script src="js/supabase-config.js"></script>
   <script src="js/router.js"></script>
   <script src="js/auth.js"></script>
   <script src="js/api.js"></script>
@@ -115,46 +347,234 @@
   <script src="js/tournament.js"></script>
   <script src="js/counter.js"></script>
   <script src="js/focus-timer.js"></script>
+  <script src="js/migrate-data.js"></script>
+  
   <script>
-    // Initialize authentication check
-    const passwordModal = document.getElementById('password-modal');
-    const passwordForm = document.getElementById('password-form');
-    const passwordInput = document.getElementById('password-input');
-    const passwordError = document.getElementById('password-error');
-
-    // Check authentication on load
-    if (!auth.isAuthenticated()) {
-      passwordModal.style.display = 'flex';
-    } else {
-      initializeApp();
-    }
-
-    // Handle password form submission
-    passwordForm.addEventListener('submit', (e) => {
-      e.preventDefault();
-      const password = passwordInput.value;
-      const result = auth.authenticate(password);
-
-      if (result.success) {
-        passwordModal.style.display = 'none';
-        passwordInput.value = '';
-        passwordError.classList.remove('show');
-        initializeApp();
-      } else {
-        passwordError.textContent = result.error;
-        passwordError.classList.add('show');
-        passwordInput.value = '';
+    // ==========================================================================
+    // Auth UI Management
+    // ==========================================================================
+    
+    const authModal = document.getElementById('auth-modal');
+    const signinForm = document.getElementById('signin-form');
+    const signupForm = document.getElementById('signup-form');
+    const resetForm = document.getElementById('reset-form');
+    const signinError = document.getElementById('signin-error');
+    const signupError = document.getElementById('signup-error');
+    const signupSuccess = document.getElementById('signup-success');
+    const resetError = document.getElementById('reset-error');
+    const resetSuccess = document.getElementById('reset-success');
+    const legacyNotice = document.getElementById('legacy-notice');
+    const userBadge = document.getElementById('user-badge');
+    
+    function showAuthTab(tab) {
+      // Reset error/success messages
+      [signinError, signupError, signupSuccess, resetError, resetSuccess].forEach(el => {
+        el.classList.remove('show');
+      });
+      
+      // Hide all forms
+      signinForm.style.display = 'none';
+      signupForm.style.display = 'none';
+      resetForm.style.display = 'none';
+      
+      // Update tabs
+      document.getElementById('tab-signin').classList.remove('active');
+      document.getElementById('tab-signup').classList.remove('active');
+      
+      if (tab === 'signin') {
+        signinForm.style.display = 'flex';
+        document.getElementById('tab-signin').classList.add('active');
+        document.querySelector('.auth-tabs').style.display = 'flex';
+      } else if (tab === 'signup') {
+        signupForm.style.display = 'flex';
+        document.getElementById('tab-signup').classList.add('active');
+        document.querySelector('.auth-tabs').style.display = 'flex';
       }
-    });
-
-    // Check for lockout
-    const lockout = auth.isLockedOut();
-    if (lockout && typeof lockout === 'object' && lockout.locked) {
-      passwordError.textContent = `Account locked. Try again in ${lockout.minutes} minute(s).`;
-      passwordError.classList.add('show');
-      passwordInput.disabled = true;
-      document.querySelector('#password-form button').disabled = true;
     }
+    
+    function showResetPassword() {
+      signinForm.style.display = 'none';
+      signupForm.style.display = 'none';
+      resetForm.style.display = 'flex';
+      document.querySelector('.auth-tabs').style.display = 'none';
+    }
+    
+    function showError(element, message) {
+      element.textContent = message;
+      element.classList.add('show');
+    }
+    
+    function showSuccess(element, message) {
+      element.textContent = message;
+      element.classList.add('show');
+    }
+    
+    function updateUserBadge() {
+      const user = auth.currentUser;
+      if (user && user.email) {
+        userBadge.style.display = 'flex';
+        userBadge.querySelector('.user-email').textContent = user.email;
+      } else {
+        userBadge.style.display = 'none';
+      }
+    }
+    
+    // ==========================================================================
+    // Form Handlers
+    // ==========================================================================
+    
+    signinForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      signinError.classList.remove('show');
+      
+      const email = document.getElementById('signin-email').value;
+      const password = document.getElementById('signin-password').value;
+      const submitBtn = signinForm.querySelector('button[type="submit"]');
+      
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Signing in...';
+      
+      try {
+        const result = await auth.signIn(email, password);
+        
+        if (result.success) {
+          authModal.style.display = 'none';
+          updateUserBadge();
+          initializeApp();
+          
+          // Check for localStorage data to migrate
+          if (window.dataMigration && window.dataMigration.hasLocalStorageData()) {
+            const shouldMigrate = confirm('Found existing local data. Would you like to migrate it to the cloud?');
+            if (shouldMigrate) {
+              const migrationResult = await window.migrateToSupabase();
+              if (migrationResult.success) {
+                alert('Data migration complete! Your data is now synced across devices.');
+              }
+            }
+          }
+        } else {
+          showError(signinError, result.error);
+        }
+      } catch (error) {
+        showError(signinError, 'An unexpected error occurred. Please try again.');
+      }
+      
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Sign In';
+    });
+    
+    signupForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      signupError.classList.remove('show');
+      signupSuccess.classList.remove('show');
+      
+      const email = document.getElementById('signup-email').value;
+      const password = document.getElementById('signup-password').value;
+      const confirmPassword = document.getElementById('signup-password-confirm').value;
+      const submitBtn = signupForm.querySelector('button[type="submit"]');
+      
+      if (password !== confirmPassword) {
+        showError(signupError, 'Passwords do not match.');
+        return;
+      }
+      
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Creating account...';
+      
+      try {
+        const result = await auth.signUp(email, password);
+        
+        if (result.success) {
+          if (result.requiresConfirmation) {
+            showSuccess(signupSuccess, result.message);
+          } else {
+            authModal.style.display = 'none';
+            updateUserBadge();
+            initializeApp();
+          }
+        } else {
+          showError(signupError, result.error);
+        }
+      } catch (error) {
+        showError(signupError, 'An unexpected error occurred. Please try again.');
+      }
+      
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Create Account';
+    });
+    
+    resetForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      resetError.classList.remove('show');
+      resetSuccess.classList.remove('show');
+      
+      const email = document.getElementById('reset-email').value;
+      const submitBtn = resetForm.querySelector('button[type="submit"]');
+      
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Sending...';
+      
+      try {
+        const result = await auth.resetPassword(email);
+        
+        if (result.success) {
+          showSuccess(resetSuccess, result.message);
+        } else {
+          showError(resetError, result.error);
+        }
+      } catch (error) {
+        showError(resetError, 'An unexpected error occurred. Please try again.');
+      }
+      
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Send Reset Link';
+    });
+    
+    async function handleLogout() {
+      await auth.signOut();
+      userBadge.style.display = 'none';
+      authModal.style.display = 'flex';
+      showAuthTab('signin');
+    }
+    
+    // ==========================================================================
+    // Initialize App
+    // ==========================================================================
+    
+    async function checkAuthAndInit() {
+      // Wait for Supabase to initialize
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Initialize Supabase if not already done
+      if (window.initSupabase) {
+        window.initSupabase();
+      }
+      
+      const isAuthenticated = await auth.isAuthenticated();
+      
+      if (!isAuthenticated) {
+        authModal.style.display = 'flex';
+        
+        // Show legacy notice if Supabase is not configured
+        if (!auth.isSupabaseEnabled()) {
+          legacyNotice.style.display = 'block';
+        }
+      } else {
+        authModal.style.display = 'none';
+        updateUserBadge();
+        initializeApp();
+      }
+      
+      // Check for lockout
+      const lockout = auth.isLockedOut();
+      if (lockout && typeof lockout === 'object' && lockout.locked) {
+        showError(signinError, `Account locked. Try again in ${lockout.minutes} minute(s).`);
+        signinForm.querySelector('button[type="submit"]').disabled = true;
+      }
+    }
+    
+    // Check auth on page load
+    document.addEventListener('DOMContentLoaded', checkAuthAndInit);
 
     // Initialize app after authentication
     function initializeApp() {
@@ -169,8 +589,21 @@
           <section class="personal-landing">
             <header class="personal-landing-header">
               <h1>Personal Dashboard</h1>
-              <p>Your productivity hub at a glance</p>
+              <p>Your productivity hub at a glance${auth.isSupabaseEnabled() ? ' — synced across devices' : ''}</p>
             </header>
+            
+            <!-- Sync Status -->
+            ${auth.isSupabaseEnabled() ? `
+              <div style="margin-bottom: 20px; padding: 12px 16px; background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 12px; display: flex; align-items: center; gap: 10px;">
+                <span style="color: var(--ok);">☁️</span>
+                <span style="color: var(--ok); font-size: 0.9rem;">Cloud sync enabled — your data is available on all devices</span>
+              </div>
+            ` : `
+              <div style="margin-bottom: 20px; padding: 12px 16px; background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 12px; display: flex; align-items: center; gap: 10px;">
+                <span style="color: var(--warn);">💾</span>
+                <span style="color: var(--warn); font-size: 0.9rem;">Local storage mode — data is stored on this device only</span>
+              </div>
+            `}
             
             <!-- Quick Stats Overview -->
             <div class="dashboard-overview">
