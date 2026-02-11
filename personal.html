@@ -910,25 +910,26 @@
       router.register('/personal/gym-log', () => {
         document.getElementById('app-content').innerHTML = '<div id="gym-log-content"></div>';
         updateActiveNav('nav-gym-log');
-        gymLog.render();
+        // Reload data from current source (Supabase or localStorage) then render
+        gymLog.init();
       });
 
       router.register('/personal/tournament', () => {
         document.getElementById('app-content').innerHTML = '<div id="tournament-content"></div>';
         updateActiveNav('nav-tournament');
-        tournament.render();
+        tournament.init();
       });
 
       router.register('/personal/counter', () => {
         document.getElementById('app-content').innerHTML = '<div id="counter-content"></div>';
         updateActiveNav('nav-counter');
-        counter.render();
+        counter.init();
       });
 
       router.register('/personal/focus-timer', () => {
         document.getElementById('app-content').innerHTML = '<div id="focus-timer-content"></div>';
         updateActiveNav('nav-focus-timer');
-        focusTimer.render();
+        focusTimer.init();
       });
 
       // Handle direct access to personal.html (no hash)

@@ -14,7 +14,7 @@ const SUPABASE_CONFIG = {
   // Enable/disable Supabase integration (set to true when configured)
   enabled: true
 };
-
+  
 // =============================================================================
 // Supabase Client Initialization
 // =============================================================================

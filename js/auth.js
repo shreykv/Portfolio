@@ -105,7 +105,12 @@ class Auth {
       return { success: true, user: data.user };
     } catch (error) {
       console.error('Sign up error:', error);
-      return { success: false, error: 'An unexpected error occurred.' };
+      // Show the real error message for debugging, not a generic one
+      const msg = error?.message || String(error);
+      if (msg.includes('Failed to fetch') || msg.includes('fetch')) {
+        return { success: false, error: 'Cannot reach Supabase. Check that the URL in supabase-config.js is correct (should be https://[project-ref].supabase.co) and that your project is not paused.' };
+      }
+      return { success: false, error: msg };
     }
   }
 
@@ -157,7 +162,11 @@ class Auth {
       return { success: true, user: data.user };
     } catch (error) {
       console.error('Sign in error:', error);
-      return { success: false, error: 'An unexpected error occurred.' };
+      const msg = error?.message || String(error);
+      if (msg.includes('Failed to fetch') || msg.includes('fetch')) {
+        return { success: false, error: 'Cannot reach Supabase. Check that the URL in supabase-config.js is correct (should be https://[project-ref].supabase.co) and that your project is not paused.' };
+      }
+      return { success: false, error: msg };
     }
   }
 

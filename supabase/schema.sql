@@ -349,13 +349,18 @@ CREATE INDEX IF NOT EXISTS idx_focus_sessions_date ON focus_sessions(date DESC);
 -- =============================================================================
 
 -- Function to automatically set updated_at timestamp
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
+-- SET search_path = '' prevents the "mutable search_path" security warning
+CREATE OR REPLACE FUNCTION public.update_updated_at_column()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
 BEGIN
   NEW.updated_at = NOW();
   RETURN NEW;
 END;
-$$ language 'plpgsql';
+$$;
 
 -- Apply updated_at trigger to relevant tables
 CREATE TRIGGER update_workouts_updated_at
