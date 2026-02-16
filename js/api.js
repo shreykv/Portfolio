@@ -861,6 +861,148 @@ class API {
   async saveSession(session) {
     return this.saveFocusSession(session);
   }
+
+  async updateFocusTask(task) {
+    if (this.isSupabaseEnabled()) {
+      const supabase = this.getSupabase();
+
+      const { data, error } = await supabase
+        .from('focus_tasks')
+        .update({
+          title: task.title,
+          description: task.description || null,
+          priority: task.priority || 'medium',
+          due_date: task.dueDate || null,
+          category: task.category || 'General',
+          completed: task.completed,
+          completed_at: task.completed ? (task.completedAt || new Date().toISOString()) : null
+        })
+        .eq('id', task.id)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error updating focus task:', error);
+        throw error;
+      }
+      return this.toCamelCase(data);
+    }
+  }
+
+  async deleteFocusTask(id) {
+    if (this.isSupabaseEnabled()) {
+      const supabase = this.getSupabase();
+
+      const { error } = await supabase
+        .from('focus_tasks')
+        .delete()
+        .eq('id', id);
+
+      if (error) {
+        console.error('Error deleting focus task:', error);
+        throw error;
+      }
+      return { success: true };
+    }
+  }
+
+  // ==========================================================================
+  // ACTIVE TIMER API METHODS (cross-device sync)
+  // ==========================================================================
+
+  async getActiveTimer() {
+    if (this.isSupabaseEnabled()) {
+      const supabase = this.getSupabase();
+
+      const { data, error } = await supabase
+        .from('active_timers')
+        .select('*')
+        .maybeSingle();
+
+      if (error) {
+        console.error('Error fetching active timer:', error);
+        return null;
+      }
+      return data ? this.toCamelCase(data) : null;
+    }
+    return null;
+  }
+
+  async upsertActiveTimer(timer) {
+    if (this.isSupabaseEnabled()) {
+      const supabase = this.getSupabase();
+      const userId = this.getUserId();
+
+      const { data, error } = await supabase
+        .from('active_timers')
+        .upsert({
+          user_id: userId,
+          task_id: timer.taskId || null,
+          duration: timer.duration,
+          remaining: timer.remaining,
+          start_time: timer.startTime,
+          status: timer.status
+        }, { onConflict: 'user_id' })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error upserting active timer:', error);
+        throw error;
+      }
+      return this.toCamelCase(data);
+    }
+    return null;
+  }
+
+  async deleteActiveTimer() {
+    if (this.isSupabaseEnabled()) {
+      const supabase = this.getSupabase();
+      const userId = this.getUserId();
+
+      const { error } = await supabase
+        .from('active_timers')
+        .delete()
+        .eq('user_id', userId);
+
+      if (error) {
+        console.error('Error deleting active timer:', error);
+        throw error;
+      }
+      return { success: true };
+    }
+    return null;
+  }
+
+  subscribeToActiveTimer(userId, callback) {
+    if (!this.isSupabaseEnabled()) return null;
+    const supabase = this.getSupabase();
+
+    const channel = supabase
+      .channel('active-timer-sync')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'active_timers',
+          filter: `user_id=eq.${userId}`
+        },
+        (payload) => {
+          callback(payload);
+        }
+      )
+      .subscribe();
+
+    return channel;
+  }
+
+  unsubscribeFromActiveTimer(channel) {
+    if (channel && this.isSupabaseEnabled()) {
+      const supabase = this.getSupabase();
+      supabase.removeChannel(channel);
+    }
+  }
 }
 
 // Export API instance

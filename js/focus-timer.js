@@ -5,6 +5,8 @@ class FocusTimer {
     this.sessions = [];
     this.currentTimer = null;
     this.timerInterval = null;
+    this.realtimeChannel = null;
+    this._ignoringRealtime = false;
     this.viewMode = 'tasks'; // 'tasks', 'timer', 'analytics'
     this.filter = 'all'; // 'all', 'active', 'completed'
     this.sortBy = 'date'; // 'date', 'priority', 'name', 'time'
@@ -14,6 +16,8 @@ class FocusTimer {
 
   async init() {
     await this.loadData();
+    await this.loadActiveTimer();
+    this.subscribeToRealtime();
     this.render();
     this.setupEventListeners();
     
@@ -33,6 +37,125 @@ class FocusTimer {
       console.error('Error loading focus timer data:', error);
       this.tasks = [];
       this.sessions = [];
+    }
+  }
+
+  async loadActiveTimer() {
+    try {
+      const timer = await api.getActiveTimer();
+      if (!timer) return;
+
+      if (timer.status === 'running') {
+        const elapsed = Math.floor((Date.now() - new Date(timer.startTime).getTime()) / 1000);
+        const remaining = timer.remaining - elapsed;
+
+        if (remaining <= 0) {
+          // Timer expired while we were away -- complete it
+          await this.completeExpiredTimer(timer);
+          return;
+        }
+
+        this.currentTimer = {
+          duration: timer.duration,
+          remaining: remaining,
+          taskId: timer.taskId,
+          isRunning: true,
+          startTime: new Date(timer.startTime).getTime()
+        };
+        this.startLocalInterval();
+      } else if (timer.status === 'paused') {
+        this.currentTimer = {
+          duration: timer.duration,
+          remaining: timer.remaining,
+          taskId: timer.taskId,
+          isRunning: false,
+          startTime: new Date(timer.startTime).getTime()
+        };
+      }
+    } catch (error) {
+      console.error('Error loading active timer:', error);
+    }
+  }
+
+  async completeExpiredTimer(timer) {
+    const session = {
+      taskId: timer.taskId,
+      duration: timer.duration,
+      startTime: timer.startTime,
+      endTime: new Date(new Date(timer.startTime).getTime() + timer.duration * 1000).toISOString(),
+      date: new Date(timer.startTime).toISOString().split('T')[0]
+    };
+
+    try {
+      if (api.isSupabaseEnabled()) {
+        await api.saveFocusSession(session);
+      } else {
+        this.sessions.push({ id: Date.now().toString(), ...session });
+        await this.saveData();
+      }
+      await api.deleteActiveTimer();
+    } catch (error) {
+      console.error('Error completing expired timer:', error);
+    }
+
+    this.showMessage('A previous timer completed while you were away!', 'success');
+  }
+
+  subscribeToRealtime() {
+    if (!api.isSupabaseEnabled()) return;
+    const userId = api.getUserId();
+    if (!userId) return;
+
+    this.realtimeChannel = api.subscribeToActiveTimer(userId, (payload) => {
+      if (this._ignoringRealtime) return;
+      this.onRealtimeEvent(payload);
+    });
+  }
+
+  onRealtimeEvent(payload) {
+    const { eventType, new: newRow, old: oldRow } = payload;
+
+    if (eventType === 'INSERT' || eventType === 'UPDATE') {
+      const timer = api.toCamelCase(newRow);
+
+      if (timer.status === 'running') {
+        const elapsed = Math.floor((Date.now() - new Date(timer.startTime).getTime()) / 1000);
+        const remaining = timer.remaining - elapsed;
+
+        if (remaining <= 0) {
+          this.clearLocalTimer();
+          this.render();
+          return;
+        }
+
+        this.clearLocalInterval();
+        this.currentTimer = {
+          duration: timer.duration,
+          remaining: remaining,
+          taskId: timer.taskId,
+          isRunning: true,
+          startTime: new Date(timer.startTime).getTime()
+        };
+        this.startLocalInterval();
+      } else if (timer.status === 'paused') {
+        this.clearLocalInterval();
+        this.currentTimer = {
+          duration: timer.duration,
+          remaining: timer.remaining,
+          taskId: timer.taskId,
+          isRunning: false,
+          startTime: new Date(timer.startTime).getTime()
+        };
+      }
+
+      this.render();
+    } else if (eventType === 'DELETE') {
+      const hadTimer = this.currentTimer !== null;
+      this.clearLocalTimer();
+      this.render();
+      if (hadTimer) {
+        this.showMessage('Timer stopped from another device.', 'info');
+      }
     }
   }
 
@@ -105,19 +228,34 @@ class FocusTimer {
     const form = e.target;
     const formData = new FormData(form);
 
-    const task = {
-      id: Date.now().toString(),
+    const taskData = {
       title: formData.get('title').trim(),
       description: formData.get('description') || '',
       priority: formData.get('priority') || 'medium',
       dueDate: formData.get('dueDate') || null,
       category: formData.get('category') || 'General',
-      completed: false,
-      createdAt: new Date().toISOString()
+      completed: false
     };
 
-    this.tasks.push(task);
-    await this.saveData();
+    try {
+      if (api.isSupabaseEnabled()) {
+        const created = await api.createFocusTask(taskData);
+        this.tasks.push(created);
+      } else {
+        const task = {
+          id: Date.now().toString(),
+          ...taskData,
+          createdAt: new Date().toISOString()
+        };
+        this.tasks.push(task);
+        await this.saveData();
+      }
+    } catch (error) {
+      console.error('Error adding task:', error);
+      this.showMessage('Failed to add task.', 'error');
+      return;
+    }
+
     form.reset();
     this.render();
     this.showMessage('Task added!', 'success');
@@ -130,17 +268,35 @@ class FocusTimer {
     task.completed = !task.completed;
     task.completedAt = task.completed ? new Date().toISOString() : null;
 
-    await this.saveData();
+    try {
+      if (api.isSupabaseEnabled()) {
+        await api.updateFocusTask(task);
+      } else {
+        await this.saveData();
+      }
+    } catch (error) {
+      console.error('Error toggling task:', error);
+    }
     this.render();
   }
 
   async deleteTask(id) {
     if (!confirm('Delete this task?')) return;
 
-    this.tasks = this.tasks.filter(t => t.id !== id);
-    // Also remove sessions linked to this task
-    this.sessions = this.sessions.filter(s => s.taskId !== id);
-    await this.saveData();
+    try {
+      if (api.isSupabaseEnabled()) {
+        await api.deleteFocusTask(id);
+      }
+      this.tasks = this.tasks.filter(t => t.id !== id);
+      this.sessions = this.sessions.filter(s => s.taskId !== id);
+      if (!api.isSupabaseEnabled()) {
+        await this.saveData();
+      }
+    } catch (error) {
+      console.error('Error deleting task:', error);
+      this.showMessage('Failed to delete task.', 'error');
+      return;
+    }
     this.render();
     this.showMessage('Task deleted.', 'success');
   }
@@ -153,7 +309,15 @@ class FocusTimer {
     if (newTitle === null) return;
 
     task.title = newTitle.trim();
-    await this.saveData();
+    try {
+      if (api.isSupabaseEnabled()) {
+        await api.updateFocusTask(task);
+      } else {
+        await this.saveData();
+      }
+    } catch (error) {
+      console.error('Error editing task:', error);
+    }
     this.render();
   }
 
@@ -193,27 +357,9 @@ class FocusTimer {
     return true;
   }
 
-  // Timer functionality
-  startTimer(duration, taskId = null) {
-    if (this.currentTimer && this.currentTimer.isRunning) {
-      return; // Timer already running
-    }
-
-    // If timer exists but paused, resume it
-    if (this.currentTimer && !this.currentTimer.isRunning) {
-      this.resumeTimer();
-      return;
-    }
-
-    // Create new timer
-    this.currentTimer = {
-      duration: duration * 60, // Convert minutes to seconds
-      remaining: duration * 60,
-      taskId: taskId,
-      isRunning: true,
-      startTime: Date.now()
-    };
-
+  // Timer helpers for local interval management
+  startLocalInterval() {
+    this.clearLocalInterval();
     this.timerInterval = setInterval(() => {
       if (this.currentTimer && this.currentTimer.isRunning) {
         this.currentTimer.remaining--;
@@ -224,64 +370,134 @@ class FocusTimer {
         }
       }
     }, 1000);
-
-    this.render();
   }
 
-  pauseTimer() {
-    if (this.currentTimer && this.currentTimer.isRunning) {
-      this.currentTimer.isRunning = false;
-      if (this.timerInterval) {
-        clearInterval(this.timerInterval);
-        this.timerInterval = null;
-      }
-      this.render();
-    }
-  }
-
-  resumeTimer() {
-    if (this.currentTimer && !this.currentTimer.isRunning) {
-      this.currentTimer.isRunning = true;
-      this.currentTimer.startTime = Date.now() - ((this.currentTimer.duration - this.currentTimer.remaining) * 1000);
-      
-      this.timerInterval = setInterval(() => {
-        if (this.currentTimer && this.currentTimer.isRunning) {
-          this.currentTimer.remaining--;
-          this.updateTimerDisplay();
-
-          if (this.currentTimer.remaining <= 0) {
-            this.stopTimer(true);
-          }
-        }
-      }, 1000);
-      this.render();
-    }
-  }
-
-  stopTimer(completed = false) {
+  clearLocalInterval() {
     if (this.timerInterval) {
       clearInterval(this.timerInterval);
       this.timerInterval = null;
     }
+  }
+
+  clearLocalTimer() {
+    this.clearLocalInterval();
+    this.currentTimer = null;
+  }
+
+  // Timer functionality
+  async startTimer(duration, taskId = null) {
+    if (this.currentTimer && this.currentTimer.isRunning) {
+      return;
+    }
+
+    if (this.currentTimer && !this.currentTimer.isRunning) {
+      this.resumeTimer();
+      return;
+    }
+
+    const now = Date.now();
+    const durationSecs = duration * 60;
+
+    this.currentTimer = {
+      duration: durationSecs,
+      remaining: durationSecs,
+      taskId: taskId,
+      isRunning: true,
+      startTime: now
+    };
+
+    this.startLocalInterval();
+    this.render();
+
+    this._ignoringRealtime = true;
+    try {
+      await api.upsertActiveTimer({
+        taskId: taskId,
+        duration: durationSecs,
+        remaining: durationSecs,
+        startTime: new Date(now).toISOString(),
+        status: 'running'
+      });
+    } catch (error) {
+      console.error('Error syncing timer start:', error);
+    }
+    this._ignoringRealtime = false;
+  }
+
+  async pauseTimer() {
+    if (!this.currentTimer || !this.currentTimer.isRunning) return;
+
+    this.currentTimer.isRunning = false;
+    this.clearLocalInterval();
+    this.render();
+
+    this._ignoringRealtime = true;
+    try {
+      await api.upsertActiveTimer({
+        taskId: this.currentTimer.taskId,
+        duration: this.currentTimer.duration,
+        remaining: this.currentTimer.remaining,
+        startTime: new Date(this.currentTimer.startTime).toISOString(),
+        status: 'paused'
+      });
+    } catch (error) {
+      console.error('Error syncing timer pause:', error);
+    }
+    this._ignoringRealtime = false;
+  }
+
+  async resumeTimer() {
+    if (!this.currentTimer || this.currentTimer.isRunning) return;
+
+    const now = Date.now();
+    this.currentTimer.isRunning = true;
+    this.currentTimer.startTime = now;
+
+    this.startLocalInterval();
+    this.render();
+
+    this._ignoringRealtime = true;
+    try {
+      await api.upsertActiveTimer({
+        taskId: this.currentTimer.taskId,
+        duration: this.currentTimer.duration,
+        remaining: this.currentTimer.remaining,
+        startTime: new Date(now).toISOString(),
+        status: 'running'
+      });
+    } catch (error) {
+      console.error('Error syncing timer resume:', error);
+    }
+    this._ignoringRealtime = false;
+  }
+
+  async stopTimer(completed = false) {
+    this.clearLocalInterval();
 
     if (this.currentTimer && completed) {
-      // Save session
       const session = {
-        id: Date.now().toString(),
         taskId: this.currentTimer.taskId,
         duration: this.currentTimer.duration - this.currentTimer.remaining,
         startTime: new Date(this.currentTimer.startTime).toISOString(),
         endTime: new Date().toISOString(),
         date: new Date().toISOString().split('T')[0]
       };
-      this.sessions.push(session);
-      this.saveData();
-      
-      // Show notification
+
+      try {
+        if (api.isSupabaseEnabled()) {
+          const saved = await api.saveFocusSession(session);
+          this.sessions.unshift(saved);
+        } else {
+          this.sessions.push({ id: Date.now().toString(), ...session });
+          await this.saveData();
+        }
+      } catch (error) {
+        console.error('Error saving session:', error);
+      }
+
       this.showMessage('Timer completed!', 'success');
-      
-      // Optional: Play sound or show notification
-      if (Notification.permission === 'granted') {
+
+      if ('Notification' in window && Notification.permission === 'granted') {
         new Notification('Timer Completed!', {
           body: 'Your focus session has ended.',
           icon: '/favicon.ico'
@@ -290,6 +506,15 @@ class FocusTimer {
     }
 
     this.currentTimer = null;
+
+    this._ignoringRealtime = true;
+    try {
+      await api.deleteActiveTimer();
+    } catch (error) {
+      console.error('Error syncing timer stop:', error);
+    }
+    this._ignoringRealtime = false;
+
     this.render();
   }
 

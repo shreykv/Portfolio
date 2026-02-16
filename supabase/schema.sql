@@ -156,6 +156,22 @@ CREATE TABLE IF NOT EXISTS focus_sessions (
 );
 
 -- =============================================================================
+-- 7. ACTIVE TIMER TABLE (for cross-device timer sync via Realtime)
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS active_timers (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL UNIQUE,
+  task_id UUID REFERENCES focus_tasks(id) ON DELETE SET NULL,
+  duration INTEGER NOT NULL,        -- total duration in seconds
+  remaining INTEGER NOT NULL,       -- remaining seconds (snapshot on pause/start)
+  start_time TIMESTAMPTZ NOT NULL,  -- when the timer was last started/resumed
+  status TEXT NOT NULL DEFAULT 'running',  -- 'running' or 'paused'
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- =============================================================================
 -- ROW LEVEL SECURITY (RLS) POLICIES
 -- =============================================================================
 
@@ -170,6 +186,7 @@ ALTER TABLE habit_entries ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tasks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE focus_tasks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE focus_sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE active_timers ENABLE ROW LEVEL SECURITY;
 
 -- =============================================================================
 -- WORKOUTS POLICIES
@@ -313,6 +330,21 @@ CREATE POLICY "Users can delete own focus sessions" ON focus_sessions
   FOR DELETE USING (auth.uid() = user_id);
 
 -- =============================================================================
+-- ACTIVE TIMERS POLICIES
+-- =============================================================================
+CREATE POLICY "Users can view own active timers" ON active_timers
+  FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own active timers" ON active_timers
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own active timers" ON active_timers
+  FOR UPDATE USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own active timers" ON active_timers
+  FOR DELETE USING (auth.uid() = user_id);
+
+-- =============================================================================
 -- INDEXES FOR PERFORMANCE
 -- =============================================================================
 
@@ -348,6 +380,9 @@ CREATE INDEX IF NOT EXISTS idx_focus_tasks_user_id ON focus_tasks(user_id);
 CREATE INDEX IF NOT EXISTS idx_focus_sessions_user_id ON focus_sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_focus_sessions_task_id ON focus_sessions(task_id);
 CREATE INDEX IF NOT EXISTS idx_focus_sessions_date ON focus_sessions(date DESC);
+
+-- Active timers indexes
+CREATE INDEX IF NOT EXISTS idx_active_timers_user_id ON active_timers(user_id);
 
 -- =============================================================================
 -- HELPER FUNCTIONS (Optional but useful)
@@ -391,6 +426,16 @@ CREATE TRIGGER update_tasks_updated_at
 CREATE TRIGGER update_focus_tasks_updated_at
   BEFORE UPDATE ON focus_tasks
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_active_timers_updated_at
+  BEFORE UPDATE ON active_timers
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- =============================================================================
+-- REALTIME (Enable for cross-device timer sync)
+-- =============================================================================
+
+ALTER PUBLICATION supabase_realtime ADD TABLE active_timers;
 
 -- =============================================================================
 -- VERIFICATION QUERY (Run after creating tables to verify)

@@ -61,8 +61,20 @@ This guide walks you through setting up Supabase for multi-device data sync on y
    - `tasks`
    - `focus_tasks`
    - `focus_sessions`
+   - `active_timers`
 
-### Step 3: Verify RLS is Enabled
+### Step 3: Verify Realtime is Enabled for Active Timers
+
+The `active_timers` table uses Supabase Realtime for cross-device timer sync. The schema SQL includes `ALTER PUBLICATION supabase_realtime ADD TABLE active_timers;` which enables this automatically. To verify:
+
+1. Go to **Database** → **Replication** in the Supabase Dashboard
+2. Under "Realtime", confirm that `active_timers` is listed
+3. If it's not listed, run this SQL manually:
+   ```sql
+   ALTER PUBLICATION supabase_realtime ADD TABLE active_timers;
+   ```
+
+### Step 4: Verify RLS is Enabled
 
 1. Click on any table (e.g., `workouts`)
 2. Go to **RLS** tab (at the top)
@@ -258,6 +270,13 @@ window.dataMigration.clearLocalStorage();
 - Verify you're signed in on both devices
 - Check Network tab for failed API requests
 
+### Focus timer not syncing across devices
+
+- The active timer uses Supabase Realtime. Verify Realtime is enabled for `active_timers` (see Step 3 above)
+- Check browser console for WebSocket errors
+- Ensure both devices are signed in to the same account
+- Timer state syncs on start, pause, resume, and stop -- the countdown display runs locally on each device
+
 ### Can't sign in after sign up
 
 - If email confirmation is enabled, check spam folder
@@ -312,11 +331,13 @@ window.dataMigration.clearLocalStorage();
 | Auth users | 50,000 MAU |
 | Storage | 1 GB |
 | API requests | Unlimited* |
+| Realtime connections | 200 concurrent |
+| Realtime messages | 2 million/month |
 | Projects | 2 |
 
 *Fair use policy applies
 
-For personal use, the free tier is more than sufficient!
+For personal use, the free tier is more than sufficient! The focus timer sync uses Realtime but generates only ~4 messages per timer session, well within limits.
 
 ---
 
