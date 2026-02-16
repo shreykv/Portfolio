@@ -541,6 +541,31 @@ select#category-selector option:hover {
   margin-top: 8px;
 }
 
+.template-notes-input {
+  grid-column: 1 / -1;
+  margin-top: 2px;
+  font-size: 12px !important;
+  padding: 8px 10px !important;
+  opacity: 0.8;
+}
+
+.template-notes-input::placeholder {
+  font-style: italic;
+  opacity: 0.5;
+}
+
+.template-exercise-item .exercise-note {
+  width: 100%;
+  font-size: 11px;
+  color: var(--muted);
+  font-style: italic;
+  opacity: 0.8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+
 .templates-list {
   background: var(--panel);
   border: 1px solid var(--border);
@@ -608,6 +633,7 @@ select#category-selector option:hover {
 .template-exercise-item {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
   padding: 10px 12px;
   background: rgba(0, 0, 0, 0.25);

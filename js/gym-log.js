@@ -978,6 +978,7 @@ class GymLog {
                         <span class="exercise-num">${idx + 1}</span>
                         <span class="exercise-name">${ex.exercise}</span>
                         <span class="exercise-details">${ex.sets}×${ex.reps} @ ${ex.weight}lbs</span>
+                        ${ex.notes ? `<span class="exercise-note" title="${ex.notes}">📝 ${ex.notes}</span>` : ''}
                       </div>
                     `).join('')}
                   </div>
@@ -1078,6 +1079,7 @@ class GymLog {
         <input type="number" name="reps-${index}" placeholder="Reps" min="1" value="${exercise?.reps || ''}" required class="template-reps-input">
         <input type="number" name="weight-${index}" placeholder="Weight" min="0" step="0.5" value="${exercise?.weight || ''}" class="template-weight-input">
         <button type="button" class="btn-icon" onclick="this.closest('.template-exercise-row').remove()">×</button>
+        <input type="text" name="notes-${index}" placeholder="Note (optional)" value="${exercise?.notes || ''}" class="template-notes-input">
       </div>
     `;
   }
@@ -1126,13 +1128,15 @@ class GymLog {
       
       if (!exerciseName) return;
       
+      const notes = (formData.get(`notes-${index}`) || '').trim();
       exercises.push({
         exercise: exerciseName,
         exerciseNormalized: this.normalizeExerciseName(exerciseName),
         category: formData.get(`category-${index}`) || 'Other',
         sets: parseInt(formData.get(`sets-${index}`)) || 3,
         reps: parseInt(formData.get(`reps-${index}`)) || 10,
-        weight: parseFloat(formData.get(`weight-${index}`)) || 0
+        weight: parseFloat(formData.get(`weight-${index}`)) || 0,
+        notes: notes || undefined
       });
     });
     
