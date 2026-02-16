@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS workouts (
   date DATE NOT NULL,
   exercise TEXT NOT NULL,
   exercise_normalized TEXT NOT NULL,
-  category TEXT DEFAULT 'Other',
+  categories TEXT[] DEFAULT '{Other}',
   sets INTEGER NOT NULL,
   reps INTEGER NOT NULL,
   weight DECIMAL(10, 2) NOT NULL,
@@ -24,6 +24,11 @@ CREATE TABLE IF NOT EXISTS workouts (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Migration: If upgrading from single category to multi-category, run:
+-- ALTER TABLE workouts ADD COLUMN categories TEXT[] DEFAULT '{Other}';
+-- UPDATE workouts SET categories = ARRAY[category] WHERE category IS NOT NULL;
+-- ALTER TABLE workouts DROP COLUMN category;
 
 -- Workout templates table
 CREATE TABLE IF NOT EXISTS workout_templates (

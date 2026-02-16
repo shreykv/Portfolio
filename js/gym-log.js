@@ -66,6 +66,19 @@ class GymLog {
     try {
       const data = localStorage.getItem('gym-log-templates');
       this.templates = data ? JSON.parse(data) : [];
+      // Migrate old single category to categories array in template exercises
+      this.templates.forEach(t => {
+        if (t.exercises) {
+          t.exercises.forEach(ex => {
+            if (!ex.categories) {
+              ex.categories = ex.category ? [ex.category] : ['Other'];
+            }
+            if (!Array.isArray(ex.categories)) {
+              ex.categories = [ex.categories];
+            }
+          });
+        }
+      });
     } catch (error) {
       console.error('Error loading templates:', error);
       this.templates = [];
@@ -88,9 +101,12 @@ class GymLog {
         if (!w.exerciseNormalized) {
           w.exerciseNormalized = this.normalizeExerciseName(w.exercise);
         }
-        // Ensure category exists (default to 'Other' for old workouts)
-        if (!w.category) {
-          w.category = 'Other';
+        // Migrate old single category to categories array
+        if (!w.categories) {
+          w.categories = w.category ? [w.category] : ['Other'];
+        }
+        if (!Array.isArray(w.categories)) {
+          w.categories = [w.categories];
         }
       });
       // Sort by date (newest first)
@@ -152,6 +168,15 @@ class GymLog {
         this.render();
       });
     }
+
+    // Close multi-select dropdowns when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.multi-select-dropdown')) {
+        document.querySelectorAll('.multi-select-dropdown.open').forEach(el => {
+          el.classList.remove('open');
+        });
+      }
+    });
   }
 
   // Normalize exercise name for consistent comparison
@@ -201,6 +226,73 @@ class GymLog {
     }
   }
 
+  // Multi-select dropdown widget helpers
+  renderCategoryMultiSelect(id, selectedCategories = [], compact = false) {
+    const selected = Array.isArray(selectedCategories) ? selectedCategories : ['Other'];
+    const tagsHtml = selected.length > 0
+      ? selected.map(cat => `<span class="category-tag">${cat}</span>`).join('')
+      : '<span class="multi-select-placeholder">Select categories...</span>';
+
+    return `
+      <div class="multi-select-dropdown${compact ? ' compact' : ''}" id="${id}">
+        <div class="multi-select-trigger" onclick="gymLog.toggleMultiSelect('${id}')">
+          <div class="multi-select-tags">${tagsHtml}</div>
+          <span class="multi-select-arrow">&#9662;</span>
+        </div>
+        <div class="multi-select-options">
+          ${this.categories.map(cat => `
+            <label class="multi-select-option">
+              <input type="checkbox" value="${cat}" ${selected.includes(cat) ? 'checked' : ''}
+                     onchange="gymLog.updateMultiSelectTags('${id}')">
+              <span>${cat}</span>
+            </label>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  toggleMultiSelect(id) {
+    const dropdown = document.getElementById(id);
+    if (!dropdown) return;
+    const isOpen = dropdown.classList.contains('open');
+    // Close all other open dropdowns first
+    document.querySelectorAll('.multi-select-dropdown.open').forEach(el => {
+      if (el.id !== id) el.classList.remove('open');
+    });
+    dropdown.classList.toggle('open', !isOpen);
+  }
+
+  updateMultiSelectTags(id) {
+    const dropdown = document.getElementById(id);
+    if (!dropdown) return;
+    const selected = this.getSelectedCategories(id);
+    const tagsContainer = dropdown.querySelector('.multi-select-tags');
+    if (tagsContainer) {
+      tagsContainer.innerHTML = selected.length > 0
+        ? selected.map(cat => `<span class="category-tag">${cat}</span>`).join('')
+        : '<span class="multi-select-placeholder">Select categories...</span>';
+    }
+  }
+
+  getSelectedCategories(id) {
+    const dropdown = document.getElementById(id);
+    if (!dropdown) return ['Other'];
+    const checkboxes = dropdown.querySelectorAll('input[type="checkbox"]:checked');
+    return Array.from(checkboxes).map(cb => cb.value);
+  }
+
+  setSelectedCategories(id, categories) {
+    const dropdown = document.getElementById(id);
+    if (!dropdown) return;
+    const cats = Array.isArray(categories) ? categories : ['Other'];
+    const checkboxes = dropdown.querySelectorAll('input[type="checkbox"]');
+    checkboxes.forEach(cb => {
+      cb.checked = cats.includes(cb.value);
+    });
+    this.updateMultiSelectTags(id);
+  }
+
   async handleSubmit(e) {
     e.preventDefault();
     const form = e.target;
@@ -217,11 +309,14 @@ class GymLog {
     const normalizedExercise = this.normalizeExerciseName(exerciseName);
     const displayExercise = this.getDisplayExerciseName(normalizedExercise);
 
+    // Collect selected categories from multi-select widget
+    const selectedCategories = this.getSelectedCategories('category-multi-select');
+
     const workout = {
       date: formData.get('date') || new Date().toISOString().split('T')[0],
       exercise: displayExercise, // Store with proper capitalization
       exerciseNormalized: normalizedExercise, // Store normalized for comparison
-      category: formData.get('category') || 'Other',
+      categories: selectedCategories.length > 0 ? selectedCategories : ['Other'],
       sets: parseInt(formData.get('sets')),
       reps: parseInt(formData.get('reps')),
       weight: parseFloat(formData.get('weight')),
@@ -333,7 +428,8 @@ class GymLog {
       form.elements.reps.value = workout.reps;
       form.elements.weight.value = workout.weight;
       form.elements.notes.value = workout.notes || '';
-      form.elements.category.value = workout.category || 'Other';
+      // Set categories in multi-select widget
+      this.setSelectedCategories('category-multi-select', workout.categories || ['Other']);
       
       // Update submit button text
       const submitBtn = form.querySelector('button[type="submit"]');
@@ -408,7 +504,7 @@ class GymLog {
   getPersonalRecords() {
     const exercises = this.getAllExercises();
     const workoutsToUse = this.selectedCategory
-      ? this.workouts.filter(w => (w.category || 'Other') === this.selectedCategory)
+      ? this.workouts.filter(w => (w.categories || ['Other']).includes(this.selectedCategory))
       : this.workouts;
     
     const exerciseMap = new Map();
@@ -418,7 +514,7 @@ class GymLog {
         // Filter stats by category if selected
         const relevantWorkouts = stats.workouts.filter(w => {
           if (!this.selectedCategory) return true;
-          return (w.category || 'Other') === this.selectedCategory;
+          return (w.categories || ['Other']).includes(this.selectedCategory);
         });
         
         if (relevantWorkouts.length > 0) {
@@ -440,7 +536,7 @@ class GymLog {
   getVolumeTrend() {
     const workoutsByDate = {};
     const workoutsToUse = this.selectedCategory 
-      ? this.workouts.filter(w => (w.category || 'Other') === this.selectedCategory)
+      ? this.workouts.filter(w => (w.categories || ['Other']).includes(this.selectedCategory))
       : this.workouts;
     
     workoutsToUse.forEach(w => {
@@ -457,7 +553,7 @@ class GymLog {
   }
 
   getCategoryTrends(category) {
-    const categoryWorkouts = this.workouts.filter(w => (w.category || 'Other') === category);
+    const categoryWorkouts = this.workouts.filter(w => (w.categories || ['Other']).includes(category));
     if (categoryWorkouts.length === 0) return null;
 
     // Group by exercise (normalized)
@@ -490,7 +586,7 @@ class GymLog {
   }
 
   getCategoryExercises(category) {
-    const categoryWorkouts = this.workouts.filter(w => (w.category || 'Other') === category);
+    const categoryWorkouts = this.workouts.filter(w => (w.categories || ['Other']).includes(category));
     const exerciseMap = new Map();
     categoryWorkouts.forEach(w => {
       const normalized = w.exerciseNormalized || this.normalizeExerciseName(w.exercise);
@@ -856,10 +952,9 @@ class GymLog {
     // Set the date to today
     form.elements.date.value = new Date().toISOString().split('T')[0];
 
-    // Set category
-    if (exercise.category && form.elements.category) {
-      form.elements.category.value = exercise.category;
-    }
+    // Set categories in multi-select widget
+    const cats = exercise.categories || (exercise.category ? [exercise.category] : ['Other']);
+    this.setSelectedCategories('category-multi-select', cats);
 
     // Set exercise
     const normalizedExercise = this.normalizeExerciseName(exercise.exercise);
@@ -926,7 +1021,7 @@ class GymLog {
     const exercises = todayWorkouts.map(w => ({
       exercise: w.exercise,
       exerciseNormalized: w.exerciseNormalized,
-      category: w.category,
+      categories: w.categories || ['Other'],
       sets: w.sets,
       reps: w.reps,
       weight: w.weight,
@@ -978,6 +1073,7 @@ class GymLog {
                         <span class="exercise-num">${idx + 1}</span>
                         <span class="exercise-name">${ex.exercise}</span>
                         <span class="exercise-details">${ex.sets}×${ex.reps} @ ${ex.weight}lbs</span>
+                        <span class="exercise-categories">${(ex.categories || []).map(c => `<span class="category-tag">${c}</span>`).join('')}</span>
                         ${ex.notes ? `<span class="exercise-note" title="${ex.notes}">📝 ${ex.notes}</span>` : ''}
                       </div>
                     `).join('')}
@@ -1072,9 +1168,11 @@ class GymLog {
         <input type="text" name="exercise-custom-${index}" class="template-exercise-custom" placeholder="Custom exercise" 
                value="${exercise && !this.commonExercises.some(ex => this.normalizeExerciseName(ex) === this.normalizeExerciseName(exercise.exercise)) ? exercise.exercise : ''}"
                style="display: ${exercise && !this.commonExercises.some(ex => this.normalizeExerciseName(ex) === this.normalizeExerciseName(exercise.exercise)) ? 'block' : 'none'}">
-        <select name="category-${index}" class="template-category-select">
-          ${this.categories.map(cat => `<option value="${cat}" ${exercise && exercise.category === cat ? 'selected' : ''}>${cat}</option>`).join('')}
-        </select>
+        ${this.renderCategoryMultiSelect(
+          `template-category-multi-select-${index}`,
+          exercise ? (exercise.categories || (exercise.category ? [exercise.category] : ['Other'])) : ['Other'],
+          true
+        )}
         <input type="number" name="sets-${index}" placeholder="Sets" min="1" value="${exercise?.sets || 3}" required class="template-sets-input">
         <input type="number" name="reps-${index}" placeholder="Reps" min="1" value="${exercise?.reps || ''}" required class="template-reps-input">
         <input type="number" name="weight-${index}" placeholder="Weight" min="0" step="0.5" value="${exercise?.weight || ''}" class="template-weight-input">
@@ -1129,10 +1227,11 @@ class GymLog {
       if (!exerciseName) return;
       
       const notes = (formData.get(`notes-${index}`) || '').trim();
+      const selectedCats = this.getSelectedCategories(`template-category-multi-select-${index}`);
       exercises.push({
         exercise: exerciseName,
         exerciseNormalized: this.normalizeExerciseName(exerciseName),
-        category: formData.get(`category-${index}`) || 'Other',
+        categories: selectedCats.length > 0 ? selectedCats : ['Other'],
         sets: parseInt(formData.get(`sets-${index}`)) || 3,
         reps: parseInt(formData.get(`reps-${index}`)) || 10,
         weight: parseFloat(formData.get(`weight-${index}`)) || 0,
@@ -1260,7 +1359,7 @@ class GymLog {
             <div class="stats-grid">
               <div class="stat-card">
                 <div class="stat-label">Total Workouts</div>
-                <div class="stat-value">${this.selectedCategory ? this.workouts.filter(w => (w.category || 'Other') === this.selectedCategory).length : this.workouts.length}</div>
+                <div class="stat-value">${this.selectedCategory ? this.workouts.filter(w => (w.categories || ['Other']).includes(this.selectedCategory)).length : this.workouts.length}</div>
               </div>
               <div class="stat-card">
                 <div class="stat-label">Unique Exercises</div>
@@ -1268,7 +1367,7 @@ class GymLog {
               </div>
               <div class="stat-card">
                 <div class="stat-label">Total Volume</div>
-                <div class="stat-value">${(this.selectedCategory ? this.workouts.filter(w => (w.category || 'Other') === this.selectedCategory) : this.workouts).reduce((sum, w) => sum + (w.sets * w.reps * w.weight), 0).toLocaleString()} lbs</div>
+                <div class="stat-value">${(this.selectedCategory ? this.workouts.filter(w => (w.categories || ['Other']).includes(this.selectedCategory)) : this.workouts).reduce((sum, w) => sum + (w.sets * w.reps * w.weight), 0).toLocaleString()} lbs</div>
               </div>
             </div>
 
@@ -1340,10 +1439,8 @@ class GymLog {
               <input type="date" id="date" name="date" value="${new Date().toISOString().split('T')[0]}" required>
             </div>
             <div class="form-group">
-              <label for="category">Category</label>
-              <select id="category" name="category" required>
-                ${this.categories.map(cat => `<option value="${cat}" ${!this.editingWorkoutId && cat === 'Other' ? 'selected' : ''}>${cat}</option>`).join('')}
-              </select>
+              <label>Categories</label>
+              ${this.renderCategoryMultiSelect('category-multi-select', ['Other'])}
             </div>
           </div>
           <div class="form-row">
@@ -1408,7 +1505,7 @@ class GymLog {
                       <span>${workout.sets} sets × ${workout.reps} reps</span>
                       <span class="workout-weight">${workout.weight} lbs</span>
                       <span class="workout-volume">Volume: ${volume.toLocaleString()} lbs</span>
-                      ${workout.category ? `<span class="workout-category" style="color: var(--muted); font-size: 0.9em;">${workout.category}</span>` : ''}
+                      ${(workout.categories || []).length > 0 ? workout.categories.map(cat => `<span class="category-tag">${cat}</span>`).join('') : ''}
                     </div>
                     ${comparison ? `
                       <div class="workout-progress">
