@@ -550,6 +550,10 @@
         window.initSupabase();
       }
       
+      // Re-initialize auth listener now that Supabase client exists
+      // (the initial call in the Auth constructor runs before initSupabase)
+      await auth.initAuthListener();
+      
       const isAuthenticated = await auth.isAuthenticated();
       
       if (!isAuthenticated) {

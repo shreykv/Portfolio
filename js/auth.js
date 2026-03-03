@@ -9,6 +9,8 @@ class Auth {
   constructor() {
     // Session management
     this.sessionKey = 'personal_auth';
+    this.attemptsKey = 'personal_auth_attempts';
+    this.maxAttempts = 5;
     this.lockoutTime = 5 * 60 * 1000; // 5 minutes in milliseconds
     
     // Current user (will be set after successful auth)
@@ -265,6 +267,9 @@ class Auth {
     if (supabase) {
       try {
         const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          this.currentUser = session.user;
+        }
         return session !== null;
       } catch (error) {
         console.error('Error checking auth status:', error);
