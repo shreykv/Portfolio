@@ -69,61 +69,65 @@ class Counter {
     this.render();
   }
 
-  increment(id, amount = 1) {
+  async increment(id, amount = 1) {
     const counter = this.counters.find(c => c.id === id);
     if (counter) {
       counter.value += amount;
       this.recordHistory(id, 'increment', counter.value);
-      this.saveCounters();
+      await this.saveCounters();
       this.render();
     }
   }
 
-  decrement(id) {
+  async decrement(id) {
     const counter = this.counters.find(c => c.id === id);
     if (counter) {
       counter.value = Math.max(0, counter.value - 1);
       this.recordHistory(id, 'decrement', counter.value);
-      this.saveCounters();
+      await this.saveCounters();
       this.render();
     }
   }
 
-  reset(id) {
+  async reset(id) {
     const counter = this.counters.find(c => c.id === id);
     if (counter) {
       counter.value = 0;
       this.recordHistory(id, 'reset', 0);
-      this.saveCounters();
+      await this.saveCounters();
       this.render();
     }
   }
 
-  deleteCounter(id) {
+  async deleteCounter(id) {
     if (!confirm('Delete this counter?')) return;
     this.counters = this.counters.filter(c => c.id !== id);
-    this.saveCounters();
+    try {
+      await api.deleteCounter(id);
+    } catch (error) {
+      console.error('Error deleting counter from DB:', error);
+    }
     this.render();
   }
 
-  setValue(id, value) {
+  async setValue(id, value) {
     const counter = this.counters.find(c => c.id === id);
     if (counter) {
       const oldValue = counter.value;
       counter.value = Math.max(0, parseInt(value) || 0);
       if (oldValue !== counter.value) {
         this.recordHistory(id, 'set', counter.value);
-        this.saveCounters();
+        await this.saveCounters();
         this.render();
       }
     }
   }
 
-  setGoal(id, goal) {
+  async setGoal(id, goal) {
     const counter = this.counters.find(c => c.id === id);
     if (counter) {
       counter.goal = Math.max(0, parseInt(goal) || 0);
-      this.saveCounters();
+      await this.saveCounters();
       this.render();
     }
   }
@@ -138,10 +142,12 @@ class Counter {
         value,
         timestamp: new Date().toISOString()
       });
-      // Keep last 100 history entries
       if (this.history.length > 100) {
         this.history = this.history.slice(0, 100);
       }
+      api.addCounterHistory(counterId, counter.name, action, value).catch(err => {
+        console.error('Error persisting counter history:', err);
+      });
     }
   }
 
@@ -160,7 +166,11 @@ class Counter {
     if (!confirm('Clear all counters? This cannot be undone.')) return;
     this.counters = [];
     this.history = [];
-    await this.saveCounters();
+    try {
+      await api.clearAllCounters();
+    } catch (error) {
+      console.error('Error clearing counters from DB:', error);
+    }
     this.render();
   }
 

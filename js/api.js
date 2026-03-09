@@ -442,10 +442,8 @@ class API {
       const supabase = this.getSupabase();
       const userId = this.getUserId();
 
-      // Sync counters
       for (const counter of data.counters) {
         if (counter.id && counter.id.length === 36) {
-          // UUID - update existing
           await supabase
             .from('counters')
             .update({
@@ -456,8 +454,7 @@ class API {
             })
             .eq('id', counter.id);
         } else {
-          // New counter or string ID - insert
-          await supabase
+          const { data: inserted, error } = await supabase
             .from('counters')
             .insert({
               user_id: userId,
@@ -465,8 +462,29 @@ class API {
               value: counter.value || 0,
               color: counter.color || '#6EE7FF',
               goal: counter.goal || 0
-            });
+            })
+            .select()
+            .single();
+
+          if (!error && inserted) {
+            counter.id = inserted.id;
+          }
         }
+      }
+
+      // Delete DB rows that no longer exist locally
+      const localIds = data.counters.map(c => c.id).filter(id => id && id.length === 36);
+      if (localIds.length > 0) {
+        await supabase
+          .from('counters')
+          .delete()
+          .eq('user_id', userId)
+          .not('id', 'in', `(${localIds.join(',')})`);
+      } else {
+        await supabase
+          .from('counters')
+          .delete()
+          .eq('user_id', userId);
       }
 
       return data;
@@ -515,6 +533,25 @@ class API {
       return { success: true };
     }
     return this.request('/api/counters', { method: 'DELETE', body: { id } });
+  }
+
+  async clearAllCounters() {
+    if (this.isSupabaseEnabled()) {
+      const supabase = this.getSupabase();
+      const userId = this.getUserId();
+
+      const { error } = await supabase
+        .from('counters')
+        .delete()
+        .eq('user_id', userId);
+
+      if (error) {
+        console.error('Error clearing all counters:', error);
+        throw error;
+      }
+      return { success: true };
+    }
+    return this.request('/api/counters', { method: 'POST', body: { counters: [], history: [] } });
   }
 
   async addCounterHistory(counterId, counterName, action, value) {

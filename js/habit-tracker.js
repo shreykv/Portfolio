@@ -57,37 +57,59 @@ class HabitTracker {
     const form = e.target;
     const formData = new FormData(form);
 
-    const habit = {
-      id: Date.now().toString(),
+    const habitData = {
       name: formData.get('name').trim(),
       category: formData.get('category') || 'General',
-      color: formData.get('color') || '#6EE7FF',
-      createdAt: new Date().toISOString()
+      color: formData.get('color') || '#6EE7FF'
     };
 
-    this.habits.push(habit);
+    try {
+      if (api.isSupabaseEnabled()) {
+        const created = await api.createHabit(habitData);
+        this.habits.push(created);
+      } else {
+        const habit = {
+          id: Date.now().toString(),
+          ...habitData,
+          createdAt: new Date().toISOString()
+        };
+        this.habits.push(habit);
+        await this.saveHabits();
+      }
+    } catch (error) {
+      console.error('Error adding habit:', error);
+      return;
+    }
+
     form.reset();
-    await this.saveHabits();
     this.render();
   }
 
-  toggleHabit(habitId, date) {
-    const entryId = `${date}-${habitId}`;
-    const existingIndex = this.entries.findIndex(e => e.id === entryId);
+  async toggleHabit(habitId, date) {
+    const existingIndex = this.entries.findIndex(e => e.habitId === habitId && e.date === date);
 
     if (existingIndex >= 0) {
       this.entries.splice(existingIndex, 1);
     } else {
       this.entries.push({
-        id: entryId,
+        id: `${date}-${habitId}`,
         habitId,
         date,
         completedAt: new Date().toISOString()
       });
     }
 
-    this.saveHabits();
     this.render();
+
+    try {
+      if (api.isSupabaseEnabled()) {
+        await api.toggleHabitEntry(habitId, date);
+      } else {
+        await this.saveHabits();
+      }
+    } catch (error) {
+      console.error('Error toggling habit entry:', error);
+    }
   }
 
   isHabitCompleted(habitId, date) {
@@ -172,11 +194,19 @@ class HabitTracker {
     return [...new Set(this.habits.map(h => h.category))];
   }
 
-  deleteHabit(id) {
+  async deleteHabit(id) {
     if (!confirm('Delete this habit?')) return;
     this.habits = this.habits.filter(h => h.id !== id);
     this.entries = this.entries.filter(e => e.habitId !== id);
-    this.saveHabits();
+    try {
+      if (api.isSupabaseEnabled()) {
+        await api.deleteHabit(id);
+      } else {
+        await this.saveHabits();
+      }
+    } catch (error) {
+      console.error('Error deleting habit:', error);
+    }
     this.render();
   }
 
