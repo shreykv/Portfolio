@@ -64,8 +64,12 @@ class GymLog {
 
   async loadTemplates() {
     try {
-      const data = localStorage.getItem('gym-log-templates');
-      this.templates = data ? JSON.parse(data) : [];
+      if (api.isSupabaseEnabled()) {
+        this.templates = await api.getWorkoutTemplates();
+      } else {
+        const data = localStorage.getItem('gym-log-templates');
+        this.templates = data ? JSON.parse(data) : [];
+      }
       // Migrate old single category to categories array in template exercises
       this.templates.forEach(t => {
         if (t.exercises) {
@@ -87,7 +91,11 @@ class GymLog {
 
   async saveTemplates() {
     try {
-      localStorage.setItem('gym-log-templates', JSON.stringify(this.templates));
+      if (api.isSupabaseEnabled()) {
+        await api.saveWorkoutTemplates(this.templates);
+      } else {
+        localStorage.setItem('gym-log-templates', JSON.stringify(this.templates));
+      }
     } catch (error) {
       console.error('Error saving templates:', error);
     }

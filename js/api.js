@@ -286,8 +286,31 @@ class API {
 
   async saveWorkoutTemplates(templates) {
     if (this.isSupabaseEnabled()) {
-      // This is a simplified approach - ideally each template would be saved individually
-      console.warn('saveWorkoutTemplates should use individual create/update methods with Supabase');
+      const supabase = this.getSupabase();
+      const userId = this.getUserId();
+
+      // Delete existing templates and re-insert
+      await supabase
+        .from('workout_templates')
+        .delete()
+        .eq('user_id', userId);
+
+      if (templates.length > 0) {
+        const rows = templates.map(t => ({
+          user_id: userId,
+          name: t.name,
+          description: t.description || null,
+          exercises: t.exercises || [],
+          created_at: t.createdAt || new Date().toISOString()
+        }));
+        const { error } = await supabase
+          .from('workout_templates')
+          .insert(rows);
+        if (error) {
+          console.error('Error saving templates to Supabase:', error);
+        }
+      }
+      return;
     }
     localStorage.setItem('gym-log-templates', JSON.stringify(templates));
   }
@@ -1040,7 +1063,79 @@ class API {
       supabase.removeChannel(channel);
     }
   }
+
+// ==========================================================================
+  // SCREENER API METHODS
+  // ==========================================================================
+  // The screener tables are publicly readable (RLS USING(true)) and pushed
+  // to by an external Python tool, not by site visitors. So no insert/update/
+  // delete methods here — read-only from the JS side.
+  // ==========================================================================
+
+  async getLatestScreenerPicks() {
+    // Always reads from the screener_latest_picks view, which auto-resolves
+    // to the most recent snapshot's picks. No need to pass a snapshot ID.
+    if (this.isSupabaseEnabled()) {
+      const supabase = this.getSupabase();
+      const { data, error } = await supabase
+        .from('screener_latest_picks')
+        .select('*')
+        .order('strategy_key', { ascending: true })
+        .order('rank', { ascending: true });
+
+      if (error) {
+        console.error('Error fetching screener picks:', error);
+        return [];
+      }
+      return this.toCamelCase(data) || [];
+    }
+    // No localStorage fallback — without Supabase there's no screener data.
+    return [];
+  }
+
+  async getScreenerSnapshots(limit = 20) {
+    if (this.isSupabaseEnabled()) {
+      const supabase = this.getSupabase();
+      const { data, error } = await supabase
+        .from('screener_snapshots')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(limit);
+
+      if (error) {
+        console.error('Error fetching screener snapshots:', error);
+        return [];
+      }
+      return this.toCamelCase(data) || [];
+    }
+    return [];
+  }
+
+  async getScreenerPriceHistory(ticker, daysBack = 90) {
+    // Pulls daily closes for one ticker over the trailing window.
+    // Used by the (future) performance chart.
+    if (this.isSupabaseEnabled()) {
+      const supabase = this.getSupabase();
+      const cutoff = new Date(Date.now() - daysBack * 86400000)
+        .toISOString().slice(0, 10);
+      const { data, error } = await supabase
+        .from('screener_prices')
+        .select('date, close, volume')
+        .eq('ticker', ticker)
+        .gte('date', cutoff)
+        .order('date', { ascending: true });
+
+      if (error) {
+        console.error('Error fetching screener prices:', error);
+        return [];
+      }
+      return data || [];
+    }
+    return [];
+  }
 }
+
+
 
 // Export API instance
 const api = new API();

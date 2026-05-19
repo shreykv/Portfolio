@@ -315,6 +315,7 @@
         <a href="#" data-route="#/personal/tournament" id="nav-tournament">Tournament</a>
         <a href="#" data-route="#/personal/counter" id="nav-counter">Counter</a>
         <a href="#" data-route="#/personal/focus-timer" id="nav-focus-timer">Focus Timer</a>
+        <a href="#" data-route="#/personal/screener" id="nav-screener">Screener</a>
         <a href="/" class="btn">Back to Portfolio</a>
         <span id="user-badge" class="user-badge" style="display:none;">
           <span class="user-email"></span>
@@ -348,6 +349,7 @@
   <script src="js/counter.js"></script>
   <script src="js/focus-timer.js"></script>
   <script src="js/migrate-data.js"></script>
+  <script src="js/screener.js"></script>
   
   <script>
     // ==========================================================================
@@ -441,17 +443,6 @@
           authModal.style.display = 'none';
           updateUserBadge();
           initializeApp();
-          
-          // Check for localStorage data to migrate
-          if (window.dataMigration && window.dataMigration.hasLocalStorageData()) {
-            const shouldMigrate = confirm('Found existing local data. Would you like to migrate it to the cloud?');
-            if (shouldMigrate) {
-              const migrationResult = await window.migrateToSupabase();
-              if (migrationResult.success) {
-                alert('Data migration complete! Your data is now synced across devices.');
-              }
-            }
-          }
         } else {
           showError(signinError, result.error);
         }
@@ -566,6 +557,13 @@
       } else {
         authModal.style.display = 'none';
         updateUserBadge();
+
+        // Clean up legacy localStorage data keys now that Supabase is the source of truth
+        if (auth.isSupabaseEnabled()) {
+          const legacyKeys = ['gym-log', 'tournaments', 'counters', 'habits', 'tasks', 'focus-timer', 'gym-log-templates'];
+          legacyKeys.forEach(key => localStorage.removeItem(key));
+        }
+
         initializeApp();
       }
       
@@ -778,6 +776,13 @@
                 <div class="card-body">
                   <h2>Focus Timer</h2>
                   <p>Manage tasks with productivity timers and track your time.</p>
+                  </div>
+              </button>
+              <button class="personal-landing-card" data-route="#/personal/screener" type="button">
+                <div class="card-icon">📈</div>
+                <div class="card-body">
+                  <h2>Stock Screener</h2>
+                  <p>S&amp;P 500 stocks ranked weekly against three investor strategies.</p>
                 </div>
               </button>
             </div>
@@ -936,6 +941,12 @@
         focusTimer.init();
       });
 
+      router.register('/personal/screener', () => {
+        document.getElementById('app-content').innerHTML = '<div id="screener-content"></div>';
+        updateActiveNav('nav-screener');
+        screener.init();
+      });
+      
       // Handle direct access to personal.html (no hash)
       if (!window.location.hash && window.location.pathname.includes('personal')) {
         router.navigate('#/personal', true);
