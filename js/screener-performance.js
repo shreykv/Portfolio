@@ -219,14 +219,46 @@
     return order;
   }
 
+  // formats a decimal return as a signed percentage string, e.g. 0.103 -> "+10.3%"
+  function pctSigned(v) {
+    return (v >= 0 ? '+' : '') + (v * 100).toFixed(1) + '%';
+  }
+
   async function renderPerformance(container, perf, opts) {
     opts = opts || {};
     if (!perf.ready) return renderEmptyState(container, perf);
 
     var colors = readColors(container);
     var meta = opts.strategyMeta || {};
+    var order = strategyDisplayOrder(perf, opts);
+
+    // Cumulative-since-inception summary: the rightmost point on each curve.
+    var benchLast = perf.benchmark[perf.benchmark.length - 1];
+    var summaryHtml =
+      '<div class="screener-perf__summary">' +
+        order.map(function (st, i) {
+          var last = perf.series[st][perf.series[st].length - 1];
+          var delta = last - benchLast;
+          var name = (meta[st] && meta[st].name) || st;
+          var color = (meta[st] && meta[st].color) || colors.palette[i % colors.palette.length];
+          var valCls = last >= 0 ? ' is-up' : ' is-down';
+          var deltaCls = delta >= 0 ? ' is-up' : ' is-down';
+          return '<div class="screener-perf__sum-item" style="--st-color:' + color + '">' +
+                   '<div class="screener-perf__sum-label">' + name + '</div>' +
+                   '<div class="screener-perf__sum-value' + valCls + '">' + pctSigned(last) + '</div>' +
+                   '<div class="screener-perf__sum-delta' + deltaCls + '">vs ' + perf.benchmarkTicker + ' ' + pctSigned(delta) + '</div>' +
+                 '</div>';
+        }).join('') +
+        '<div class="screener-perf__sum-item screener-perf__sum-item--bench">' +
+          '<div class="screener-perf__sum-label">' + perf.benchmarkTicker + '</div>' +
+          '<div class="screener-perf__sum-value' + (benchLast >= 0 ? ' is-up' : ' is-down') + '">' + pctSigned(benchLast) + '</div>' +
+          '<div class="screener-perf__sum-delta">benchmark</div>' +
+        '</div>' +
+      '</div>';
+
     container.innerHTML =
       '<div class="screener-perf">' +
+        summaryHtml +
         '<p class="screener-perf__range">' +
           perf.coverage.dateRange.start + ' \u2192 ' + perf.coverage.dateRange.end +
           ' \u00b7 ' + perf.coverage.snapshotCount + ' snapshots \u00b7 equal-weight, rebalanced weekly' +
@@ -246,7 +278,6 @@
       return;
     }
 
-    var order = strategyDisplayOrder(perf, opts);
     var datasets = order.map(function (st, i) {
       return {
         label: (meta[st] && meta[st].name) || st,

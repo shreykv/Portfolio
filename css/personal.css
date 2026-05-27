@@ -3476,5 +3476,55 @@ select#category-selector option:hover {
   .screener-perf__notes ul { margin: 8px 0 0 18px; padding: 0; }
   .screener-perf__notes li { margin: 2px 0; }
    
+   /* Performance summary row (above the chart) */
+   .screener-perf__summary {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+    margin: 0 0 16px;
+  }
+  @media (min-width: 640px) {
+    /* Up to 4 cells: 3 strategies + SPY. Auto-fits with min width. */
+    .screener-perf__summary {
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    }
+  }
+ 
+  .screener-perf__sum-item {
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--st-color, var(--border));
+    border-radius: var(--radius2, 8px);
+    padding: 10px 12px;
+    min-width: 0;
+  }
+  .screener-perf__sum-item--bench {
+    border-left-color: var(--muted2);
+  }
+  .screener-perf__sum-label {
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .screener-perf__sum-value {
+    font-size: 20px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.01em;
+  }
+  .screener-perf__sum-value.is-up   { color: var(--ok); }
+  .screener-perf__sum-value.is-down { color: var(--danger); }
+  .screener-perf__sum-delta {
+    font-size: 11px;
+    color: var(--muted2);
+    margin-top: 2px;
+    font-variant-numeric: tabular-nums;
+  }
+  .screener-perf__sum-delta.is-up   { color: var(--ok); }
+  .screener-perf__sum-delta.is-down { color: var(--danger); }
+
   .muted { color: var(--muted); }
   .section-title { font-size: 1.1rem; margin: 24px 0 12px; }
