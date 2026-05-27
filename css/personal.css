@@ -3451,6 +3451,30 @@ select#category-selector option:hover {
     border: 1px solid var(--danger);
     border-radius: var(--radius);
   }
+  /* Performance vs S&P 500 chart */
+  .screener-perf {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px;
+  }
+  .screener-perf__range {
+    margin: 0 0 12px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .screener-perf__chart {
+    position: relative;
+    height: 320px;   /* Chart.js needs an explicit height in this mode */
+  }
+  .screener-perf__notes {
+    margin-top: 12px;
+    font-size: 12px;
+    color: var(--muted2);
+  }
+  .screener-perf__notes summary { cursor: pointer; color: var(--accent); }
+  .screener-perf__notes ul { margin: 8px 0 0 18px; padding: 0; }
+  .screener-perf__notes li { margin: 2px 0; }
    
   .muted { color: var(--muted); }
   .section-title { font-size: 1.1rem; margin: 24px 0 12px; }

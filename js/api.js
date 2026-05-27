@@ -1133,6 +1133,51 @@ class API {
     }
     return [];
   }
+
+  async getAllScreenerPicks() {
+    // All picks across ALL snapshots (not just the latest-picks view).
+    if (!this.isSupabaseEnabled()) return [];
+    const supabase = this.getSupabase();
+    const PAGE = 1000;
+    const rows = [];
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await supabase
+        .from('screener_picks')
+        .select('snapshot_id, strategy_key, ticker, rank, score, name')
+        .order('snapshot_id', { ascending: true })
+        .order('strategy_key', { ascending: true })
+        .order('rank', { ascending: true })
+        .range(from, from + PAGE - 1);
+      if (error) { console.error('Error fetching all screener picks:', error); break; }
+      rows.push(...(data || []));
+      if (!data || data.length < PAGE) break;
+    }
+    return this.toCamelCase(rows);
+  }
+
+  async getAllScreenerPrices(sinceDate = null) {
+    // Daily closes for all tickers (picks + SPY). The prices table only ever
+    // holds picked tickers + SPY, so "all" is already scoped to what the chart
+    // needs. Optional sinceDate trims rows before the first snapshot.
+    if (!this.isSupabaseEnabled()) return [];
+    const supabase = this.getSupabase();
+    const PAGE = 1000;
+    const rows = [];
+    for (let from = 0; ; from += PAGE) {
+      let q = supabase
+        .from('screener_prices')
+        .select('ticker, date, close')
+        .order('ticker', { ascending: true })
+        .order('date', { ascending: true })
+        .range(from, from + PAGE - 1);
+      if (sinceDate) q = q.gte('date', sinceDate);
+      const { data, error } = await q;
+      if (error) { console.error('Error fetching all screener prices:', error); break; }
+      rows.push(...(data || []));
+      if (!data || data.length < PAGE) break;
+    }
+    return rows; // single-word columns; camelCase not needed
+  }
 }
 
 

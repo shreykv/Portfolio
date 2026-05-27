@@ -19,6 +19,20 @@ class Screener {
     container.innerHTML = this.renderShell();
     await this.loadLatest();
     this.renderGrid();
+    this.renderPerformance();
+  }
+
+  async renderPerformance() {
+    const el = document.getElementById('screener-performance');
+    if (!el || !window.ScreenerPerformance) return;
+    await window.ScreenerPerformance.init(el, {
+      getSnapshots: ()      => api.getScreenerSnapshots(500),
+      getPicks:     ()      => api.getAllScreenerPicks(),
+      getPrices:    (since) => api.getAllScreenerPrices(since)
+    }, {
+      strategyMeta:  Screener.STRATEGY_INFO,   // { buffett: {name, color}, ... }
+      strategyOrder: Screener.STRATEGY_ORDER
+    });
   }
 
   async loadLatest() {
@@ -95,7 +109,7 @@ class Screener {
     return `
       <section class="screener-shell">
         <header class="screener-header">
-          <h1>📈 Strategy Screener</h1>
+          <h1>Strategy Screener</h1>
           <p class="muted">
             S&amp;P 500 stocks ranked weekly against three legendary investor strategies.
           </p>
@@ -108,12 +122,13 @@ class Screener {
           <div class="screener-loading">Loading…</div>
         </div>
 
-        <h2 class="section-title" style="margin-top:36px">Performance vs S&amp;P 500</h2>
-        <div class="screener-placeholder">
-          📊 Tracking begins on first weekly snapshot. Performance chart will appear
-          here once 4+ weeks of history have accumulated.
-        </div>
-
+<h2 class="section-title" style="margin-top:36px">Performance vs S&amp;P 500</h2>
+        <div id="screener-performance">
+          <div class="screener-placeholder">
+            Tracking begins on first weekly snapshot. Performance chart will appear
+            here once 2+ weekly snapshots have accumulated.
+          </div>
+        
         <h2 class="section-title" style="margin-top:36px">Methodology</h2>
         <div class="screener-methodology">
           <p class="muted">
