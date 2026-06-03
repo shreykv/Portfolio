@@ -150,8 +150,11 @@ class Screener {
 
         <p class="screener-disclaimer">
           For educational and personal interest only. Not financial advice. Data may be
-          delayed, incomplete, or contain errors. Strategy thresholds are interpretations
-          of public descriptions and may not match how the named investors actually invest.
+          delayed, incomplete, or contain errors. Multi-year (5Y) growth figures are
+          approximated from the ~4 years of annual statements available via yfinance, so
+          they may understate or overstate true 5-year growth. Strategy thresholds are
+          interpretations of public descriptions and may not match how the named investors
+          actually invest.
         </p>
       </section>
     `;

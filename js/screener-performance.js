@@ -2,25 +2,25 @@
  * screener-performance.js
  * "Performance vs S&P 500" chart for the screener mini-site.
  *
- * Renders INLINE into the existing "Performance vs S&P 500" section of
- * screener.js (no new route). Reads via the existing api.js (anon key,
- * read-only RLS) and matches the site's camelCase + CSS-variable conventions.
+ * MODEL: held while criteria met
+ *   - Each pick OPENS a position at its first-appearance snapshot's close.
+ *   - The position CLOSES at the next snapshot where the ticker is no longer
+ *     in picks; the close uses that snapshot's price as the exit.
+ *   - A ticker that drops out and later re-qualifies opens a new, separate
+ *     position (no carry-over from the prior position).
+ *   - Positions still in picks at the latest snapshot are marked-to-market.
  *
- * TESTED, framework-independent core:
- *   normalizeData()      - reshape api.js rows into engine inputs
- *   computePerformance() - equal-weight, rebalanced-at-each-snapshot cumulative
- *                          return per strategy vs the SPY benchmark
+ * BENCHMARK
+ *   - Per-strategy summary cards compare against PAIRED SPY: every time the
+ *     strategy opens a position, an equal-weight SPY position opens the same
+ *     day and holds for the same period. Apples-to-apples since both invest
+ *     on the same schedule.
+ *   - The SPY line on the chart is plain BUY-AND-HOLD SPY from the first
+ *     snapshot. Useful for absolute market context; the FAIR comparison is the
+ *     paired-SPY delta on each card. The methodology details below the chart
+ *     spell this out.
  *
- * Scaffolding-phase design (matches the project handoff):
- *   - Curve points are anchored at SNAPSHOT DATES. The only unambiguous
- *     resolution with sparse data; daily-resolution valuation is a later
- *     upgrade (the price data to support it is already being collected).
- *   - <2 snapshots, or no priced period yet -> honest "collecting data (N/8)"
- *     state instead of a misleading flat line.
- *   - A pick missing a price at a period endpoint is dropped from THAT period's
- *     average (and recorded in coverage), never treated as a 0% return.
- *   - Weekend/holiday snapshot dates fall back to the latest trading day on or
- *     before the date (within PRICE_LOOKBACK_DAYS).
+ * Curve values are decimals (0.1 == +10%); the renderer multiplies by 100.
  * ============================================================================= */
 
 (function (global) {
@@ -30,39 +30,33 @@
   var BENCHMARK = 'SPY';
   var TARGET_SNAPSHOTS = 8;
 
-  /* COLUMN MAP — keys here are the camelCase field names api.js produces via
-   * toCamelCase(), confirmed against screener_schema.sql. The only non-obvious
-   * one is pickStrategy: the column is `strategy_key` -> `strategyKey`. */
   var COLUMN_MAP = {
     snapshotId:     'id',
-    snapshotDate:   'createdAt',     // screener_snapshots.created_at (TIMESTAMPTZ)
-    pickSnapshotId: 'snapshotId',    // screener_picks.snapshot_id
-    pickStrategy:   'strategyKey',   // screener_picks.strategy_key
+    snapshotDate:   'createdAt',
+    pickSnapshotId: 'snapshotId',
+    pickStrategy:   'strategyKey',
     pickTicker:     'ticker',
     priceTicker:    'ticker',
-    priceDate:      'date',          // screener_prices.date (DATE)
+    priceDate:      'date',
     priceClose:     'close'
   };
 
-  // --- date helpers (ISO 'YYYY-MM-DD'; string compare == chronological) ------
+  // ---- date helpers (ISO 'YYYY-MM-DD'; string compare == chronological) ----
   function isoDay(v) {
     if (v == null) return null;
     if (v instanceof Date) return v.toISOString().slice(0, 10);
     return String(v).slice(0, 10);
   }
   function daysBetween(isoA, isoB) {
-    var a = new Date(isoA + 'T00:00:00Z').getTime();
-    var b = new Date(isoB + 'T00:00:00Z').getTime();
-    return Math.round((a - b) / 86400000);
+    return Math.round(
+      (new Date(isoA + 'T00:00:00Z').getTime() - new Date(isoB + 'T00:00:00Z').getTime()) / 86400000
+    );
   }
   function minusDays(iso, n) {
-    var t = new Date(iso + 'T00:00:00Z').getTime() - n * 86400000;
-    return new Date(t).toISOString().slice(0, 10);
+    return new Date(new Date(iso + 'T00:00:00Z').getTime() - n * 86400000).toISOString().slice(0, 10);
   }
 
-  /* ---------------------------------------------------------------------------
-   * normalizeData — reshape rows into { snapshots, picks, prices }. Pure.
-   * ------------------------------------------------------------------------- */
+  /* normalizeData — reshape rows into { snapshots, picks, prices }. Pure. */
   function normalizeData(raw, map) {
     map = map || COLUMN_MAP;
     var snaps = (raw.snapshots || []).map(function (r) {
@@ -91,7 +85,7 @@
     return { snapshots: snaps, picks: picks, prices: prices };
   }
 
-  // latest close on or before `date`, within PRICE_LOOKBACK_DAYS
+  /* priceAt — latest close on or before `date`, within PRICE_LOOKBACK_DAYS. */
   function priceAt(prices, cache, ticker, date) {
     var byDate = prices[ticker];
     if (!byDate) return null;
@@ -105,8 +99,29 @@
   }
 
   /* ---------------------------------------------------------------------------
-   * computePerformance — chained equal-weight returns vs benchmark.
-   * Returns cumulative DECIMALS (0.1 == +10%); ×100 at render.
+   * computePerformance — Model B with paired SPY.
+   *
+   * Per strategy: walk snapshots chronologically, maintaining a set of open
+   * positions per ticker. On each snapshot, close any open positions whose
+   * ticker is no longer picked, and open new positions for newly-picked
+   * tickers. Each opened position records its entry price, paired SPY entry
+   * price, and (later) an exit date when it falls out.
+   *
+   * Then, for each snapshot date t, average the position returns across
+   * positions whose entryDate <= t:
+   *   evalDate = exitDate (if closed by t) else t
+   *   strat ret = priceAt(ticker, evalDate) / entryPrice - 1
+   *   paired SPY ret = priceAt(SPY, evalDate) / spyEntry - 1
+   * Both arrays stay length-matched by skipping a position if either price
+   * is missing.
+   *
+   * Returns {
+   *   ready, dates, strategies,
+   *   series:          { strat: [cumDecimal at each snapshot date] },
+   *   pairedBenchmark: { strat: [cumDecimal at each snapshot date] },   // for cards
+   *   benchmark:       [cumDecimal at each snapshot date],              // BH SPY (chart line)
+   *   benchmarkTicker, coverage
+   * }
    * ------------------------------------------------------------------------- */
   function computePerformance(snapshots, picks, prices, opts) {
     opts = opts || {};
@@ -116,67 +131,143 @@
       snapshotCount: snapshots.length,
       dateRange: snapshots.length
         ? { start: snapshots[0].date, end: snapshots[snapshots.length - 1].date } : null,
-      periods: [], notes: []
+      notes: []
     };
 
+    var dates = snapshots.map(function (s) { return s.date; });
+
     if (snapshots.length < 2) {
-      return { ready: false, dates: snapshots.map(function (s) { return s.date; }),
-               strategies: [], series: {}, benchmark: [], benchmarkTicker: benchTicker, coverage: coverage };
+      return {
+        ready: false, dates: dates, strategies: [],
+        series: {}, pairedBenchmark: {}, benchmark: [],
+        benchmarkTicker: benchTicker, coverage: coverage
+      };
     }
 
-    var bySnap = {}, strategySet = {};
+    // Group picks: snapshotId -> strategy -> Set(tickers)
+    var picksBySnapAndStrat = {};
+    var strategySet = {};
     picks.forEach(function (p) {
       strategySet[p.strategy] = true;
-      var s = bySnap[p.snapshotId] || (bySnap[p.snapshotId] = {});
-      (s[p.strategy] || (s[p.strategy] = [])).push(p.ticker);
+      var bySnap = picksBySnapAndStrat[p.snapshotId] || (picksBySnapAndStrat[p.snapshotId] = {});
+      (bySnap[p.strategy] || (bySnap[p.strategy] = Object.create(null)))[p.ticker] = true;
     });
     var strategies = Object.keys(strategySet).sort();
 
-    var dates = snapshots.map(function (s) { return s.date; });
-    var cumFactor = {}, series = {};
-    strategies.forEach(function (st) { cumFactor[st] = 1; series[st] = [0]; });
-    var benchFactor = 1, benchmark = [0];
-
-    for (var i = 0; i < snapshots.length - 1; i++) {
-      var di = snapshots[i].date, dj = snapshots[i + 1].date;
-      var held = bySnap[snapshots[i].id] || {};
-      var periodInfo = { from: di, to: dj, strategies: {}, benchmark: null };
-
-      strategies.forEach(function (st) {
-        var tickers = held[st] || [], rets = [], missing = 0;
-        tickers.forEach(function (tk) {
-          var p0 = priceAt(prices, cache, tk, di), p1 = priceAt(prices, cache, tk, dj);
-          if (p0 != null && p1 != null && p0 > 0) rets.push(p1 / p0 - 1);
-          else missing++;
-        });
-        if (rets.length) {
-          var r = rets.reduce(function (a, b) { return a + b; }, 0) / rets.length;
-          cumFactor[st] *= (1 + r);
-          periodInfo.strategies[st] = { ret: r, used: rets.length, missing: missing };
-        } else {
-          periodInfo.strategies[st] = { ret: null, used: 0, missing: missing };
-          if (tickers.length) coverage.notes.push(st + ': no priced picks for ' + di + '\u2192' + dj + ' (held flat)');
-        }
-        series[st].push(cumFactor[st] - 1);
-      });
-
-      var b0 = priceAt(prices, cache, benchTicker, di), b1 = priceAt(prices, cache, benchTicker, dj);
-      if (b0 != null && b1 != null && b0 > 0) { var br = b1 / b0 - 1; benchFactor *= (1 + br); periodInfo.benchmark = br; }
-      else coverage.notes.push(benchTicker + ': missing price for ' + di + '\u2192' + dj + ' (held flat)');
-      benchmark.push(benchFactor - 1);
-      coverage.periods.push(periodInfo);
-    }
-
-    var hasSignal = coverage.periods.some(function (per) {
-      return Object.keys(per.strategies).some(function (k) { return per.strategies[k].ret != null; });
+    // Position tracking per strategy
+    var posByStrategy = {};
+    var openByStrategy = {};
+    strategies.forEach(function (st) {
+      posByStrategy[st] = [];
+      openByStrategy[st] = Object.create(null);
     });
 
-    return { ready: hasSignal, dates: dates, strategies: strategies, series: series,
-             benchmark: benchmark, benchmarkTicker: benchTicker, coverage: coverage };
+    for (var i = 0; i < snapshots.length; i++) {
+      var snap = snapshots[i];
+      var pickedAtSnap = picksBySnapAndStrat[snap.id] || {};
+
+      for (var sIdx = 0; sIdx < strategies.length; sIdx++) {
+        var st = strategies[sIdx];
+        var picked = pickedAtSnap[st] || Object.create(null);
+        var open = openByStrategy[st];
+
+        // EXITS first (so a re-entry on the same snap can't see itself as open)
+        var openTickers = Object.keys(open);
+        for (var k = 0; k < openTickers.length; k++) {
+          var openTicker = openTickers[k];
+          if (!picked[openTicker]) {
+            open[openTicker].exitDate = snap.date;   // close at this snap's close
+            delete open[openTicker];
+          }
+        }
+
+        // ENTRIES: anything picked but not currently open
+        var pickedTickers = Object.keys(picked);
+        for (var j = 0; j < pickedTickers.length; j++) {
+          var tk = pickedTickers[j];
+          if (open[tk]) continue;
+          var entryPrice = priceAt(prices, cache, tk, snap.date);
+          var spyEntry = priceAt(prices, cache, benchTicker, snap.date);
+          if (entryPrice == null || entryPrice <= 0 ||
+              spyEntry == null || spyEntry <= 0) {
+            coverage.notes.push(st + ': could not open ' + tk + ' at ' + snap.date + ' (price unavailable)');
+            continue;
+          }
+          var pos = { ticker: tk, entryDate: snap.date, entryPrice: entryPrice,
+                      spyEntry: spyEntry, exitDate: null };
+          posByStrategy[st].push(pos);
+          open[tk] = pos;
+        }
+      }
+    }
+
+    // No positions opened anywhere -> empty state
+    var anyPos = strategies.some(function (st) { return posByStrategy[st].length > 0; });
+    if (!anyPos) {
+      return {
+        ready: false, dates: dates, strategies: strategies,
+        series: {}, pairedBenchmark: {}, benchmark: [],
+        benchmarkTicker: benchTicker, coverage: coverage
+      };
+    }
+
+    // Curves
+    var series = {};
+    var pairedBenchmark = {};
+    for (var sx = 0; sx < strategies.length; sx++) {
+      var strat = strategies[sx];
+      var positions = posByStrategy[strat];
+      series[strat] = [];
+      pairedBenchmark[strat] = [];
+
+      for (var di = 0; di < dates.length; di++) {
+        var t = dates[di];
+        var stratSum = 0, spySum = 0, n = 0;
+        for (var pi = 0; pi < positions.length; pi++) {
+          var pos = positions[pi];
+          if (pos.entryDate > t) continue;
+          var evalDate = (pos.exitDate != null && pos.exitDate <= t) ? pos.exitDate : t;
+          var p = priceAt(prices, cache, pos.ticker, evalDate);
+          var sp = priceAt(prices, cache, benchTicker, evalDate);
+          if (p == null || p <= 0 || sp == null || sp <= 0) continue;
+          stratSum += (p / pos.entryPrice - 1);
+          spySum   += (sp / pos.spyEntry - 1);
+          n++;
+        }
+        series[strat].push(n > 0 ? stratSum / n : 0);
+        pairedBenchmark[strat].push(n > 0 ? spySum / n : 0);
+      }
+    }
+
+    // Buy-and-hold SPY reference line (for the chart)
+    var benchmark = [];
+    var spyAtStart = priceAt(prices, cache, benchTicker, dates[0]);
+    for (var bi = 0; bi < dates.length; bi++) {
+      if (spyAtStart == null || spyAtStart <= 0) { benchmark.push(0); continue; }
+      var spyT = priceAt(prices, cache, benchTicker, dates[bi]);
+      benchmark.push(spyT == null ? 0 : spyT / spyAtStart - 1);
+    }
+
+    // Ready when at least one strategy has a non-zero curve point (i.e. some
+    // position has had time to realize a return). With only one snapshot, all
+    // positions have entry == eval -> all 0% -> still not "ready" for display.
+    var hasSignal = strategies.some(function (st) {
+      var arr = series[st];
+      for (var k = 1; k < arr.length; k++) if (arr[k] !== 0) return true;
+      return false;
+    });
+
+    return {
+      ready: hasSignal, dates: dates, strategies: strategies,
+      series: series, pairedBenchmark: pairedBenchmark, benchmark: benchmark,
+      benchmarkTicker: benchTicker, coverage: coverage
+    };
   }
 
   /* =========================================================================
-   * Browser integration (render + fetch glue)
+   * Browser integration (render + fetch glue). Most of this is unchanged from
+   * the previous build; the summary cards now read from pairedBenchmark, and
+   * a methodology details block is added below the chart.
    * ========================================================================= */
 
   function readColors(el) {
@@ -186,7 +277,6 @@
       benchmark: v('--muted2', '#9aa0a6'),
       grid:      v('--border', 'rgba(255,255,255,0.10)'),
       text:      v('--text', '#e8e8e8'),
-      // fallback palette; per-strategy colors normally come from strategyMeta
       palette: [ v('--accent', '#3b82f6'), v('--accent2', '#10b981'), '#f59e0b', '#a142f4', '#ff6d00' ]
     };
   }
@@ -206,8 +296,8 @@
     container.innerHTML =
       '<div class="screener-placeholder">' +
         '\uD83D\uDCCA Collecting weekly snapshots \u2014 <strong>' + perf.coverage.snapshotCount +
-        ' / ' + TARGET_SNAPSHOTS + '</strong>. The chart appears automatically once at ' +
-        'least two snapshots exist, and sharpens with each weekly refresh.' +
+        ' / ' + TARGET_SNAPSHOTS + '</strong>. The chart appears once at least two ' +
+        'snapshots exist and one position has time to realize a return.' +
       '</div>';
   }
 
@@ -219,9 +309,29 @@
     return order;
   }
 
-  // formats a decimal return as a signed percentage string, e.g. 0.103 -> "+10.3%"
   function pctSigned(v) {
     return (v >= 0 ? '+' : '') + (v * 100).toFixed(1) + '%';
+  }
+
+  function methodologyHtml(perf) {
+    return '<details class="screener-perf__methodology">' +
+      '<summary>How this is calculated</summary>' +
+      '<p>Each pick opens a position at the close of the snapshot when it\u2019s ' +
+      'first selected, and closes at the next snapshot where it\u2019s no longer ' +
+      'in the strategy\u2019s picks. Continuing positions are marked-to-market at ' +
+      'the latest snapshot. Each strategy\u2019s cumulative return is the equal-' +
+      'weight average across every position (open and closed) at the current date.</p>' +
+      '<p>The \u201Cvs ' + perf.benchmarkTicker + '\u201D figure on each strategy card uses ' +
+      '<strong>paired ' + perf.benchmarkTicker + '</strong>: every time the strategy opens a ' +
+      'position, an equal-weight ' + perf.benchmarkTicker + ' position opens the same day and ' +
+      'holds for the same period. This is the apples-to-apples comparison because both invest ' +
+      'on the same schedule. The dashed ' + perf.benchmarkTicker + ' line on the chart shows ' +
+      'plain buy-and-hold ' + perf.benchmarkTicker + ' from the first snapshot, for absolute ' +
+      'market context only.</p>' +
+      '<p>Multi-year (5Y) growth figures used in screening are approximated from the ~4 years ' +
+      'of annual statements available via yfinance, so they may understate or overstate true ' +
+      '5-year growth.</p>' +
+      '</details>';
   }
 
   async function renderPerformance(container, perf, opts) {
@@ -232,27 +342,30 @@
     var meta = opts.strategyMeta || {};
     var order = strategyDisplayOrder(perf, opts);
 
-    // Cumulative-since-inception summary: the rightmost point on each curve.
+    // Per-strategy summary cards (top): cumulative + paired-SPY delta.
     var benchLast = perf.benchmark[perf.benchmark.length - 1];
     var summaryHtml =
       '<div class="screener-perf__summary">' +
         order.map(function (st, i) {
-          var last = perf.series[st][perf.series[st].length - 1];
-          var delta = last - benchLast;
+          var stratLast = perf.series[st][perf.series[st].length - 1];
+          var pairedLast = (perf.pairedBenchmark[st] || [])[(perf.pairedBenchmark[st] || []).length - 1] || 0;
+          var delta = stratLast - pairedLast;
           var name = (meta[st] && meta[st].name) || st;
           var color = (meta[st] && meta[st].color) || colors.palette[i % colors.palette.length];
-          var valCls = last >= 0 ? ' is-up' : ' is-down';
+          var valCls = stratLast >= 0 ? ' is-up' : ' is-down';
           var deltaCls = delta >= 0 ? ' is-up' : ' is-down';
           return '<div class="screener-perf__sum-item" style="--st-color:' + color + '">' +
                    '<div class="screener-perf__sum-label">' + name + '</div>' +
-                   '<div class="screener-perf__sum-value' + valCls + '">' + pctSigned(last) + '</div>' +
-                   '<div class="screener-perf__sum-delta' + deltaCls + '">vs ' + perf.benchmarkTicker + ' ' + pctSigned(delta) + '</div>' +
+                   '<div class="screener-perf__sum-value' + valCls + '">' + pctSigned(stratLast) + '</div>' +
+                   '<div class="screener-perf__sum-delta' + deltaCls + '">vs ' + perf.benchmarkTicker +
+                   ' (paired) ' + pctSigned(delta) + '</div>' +
                  '</div>';
         }).join('') +
         '<div class="screener-perf__sum-item screener-perf__sum-item--bench">' +
-          '<div class="screener-perf__sum-label">' + perf.benchmarkTicker + '</div>' +
-          '<div class="screener-perf__sum-value' + (benchLast >= 0 ? ' is-up' : ' is-down') + '">' + pctSigned(benchLast) + '</div>' +
-          '<div class="screener-perf__sum-delta">benchmark</div>' +
+          '<div class="screener-perf__sum-label">' + perf.benchmarkTicker + ' since start</div>' +
+          '<div class="screener-perf__sum-value' + (benchLast >= 0 ? ' is-up' : ' is-down') + '">' +
+            pctSigned(benchLast) + '</div>' +
+          '<div class="screener-perf__sum-delta">buy-and-hold reference</div>' +
         '</div>' +
       '</div>';
 
@@ -261,9 +374,10 @@
         summaryHtml +
         '<p class="screener-perf__range">' +
           perf.coverage.dateRange.start + ' \u2192 ' + perf.coverage.dateRange.end +
-          ' \u00b7 ' + perf.coverage.snapshotCount + ' snapshots \u00b7 equal-weight, rebalanced weekly' +
+          ' \u00b7 ' + perf.coverage.snapshotCount + ' snapshots \u00b7 held while criteria met' +
         '</p>' +
         '<div class="screener-perf__chart"><canvas></canvas></div>' +
+        methodologyHtml(perf) +
         (perf.coverage.notes.length
           ? '<details class="screener-perf__notes"><summary>Data gaps (' + perf.coverage.notes.length +
             ')</summary><ul><li>' + perf.coverage.notes.join('</li><li>') + '</li></ul></details>'
@@ -278,6 +392,7 @@
       return;
     }
 
+    // Chart: one solid line per strategy + a dashed buy-and-hold SPY reference.
     var datasets = order.map(function (st, i) {
       return {
         label: (meta[st] && meta[st].name) || st,
@@ -287,7 +402,7 @@
       };
     });
     datasets.push({
-      label: perf.benchmarkTicker,
+      label: perf.benchmarkTicker + ' (buy & hold)',
       data: perf.benchmark.map(function (v) { return +(v * 100).toFixed(2); }),
       borderColor: colors.benchmark, backgroundColor: 'transparent',
       borderDash: [6, 4], tension: 0.2, pointRadius: 2, borderWidth: 2
@@ -313,12 +428,6 @@
     });
   }
 
-  /* ---------------------------------------------------------------------------
-   * init — entry point called from screener.js.
-   * `fetchers` = { getSnapshots(): rows, getPicks(): rows, getPrices(since): rows }
-   * (wire these to api.js — see screener-integration.md).
-   * `opts`     = { strategyMeta, strategyOrder, columnMap?, benchmark? }
-   * ------------------------------------------------------------------------- */
   async function init(containerOrSelector, fetchers, opts) {
     var el = typeof containerOrSelector === 'string'
       ? document.querySelector(containerOrSelector) : containerOrSelector;
@@ -347,7 +456,7 @@
     COLUMN_MAP: COLUMN_MAP,
     config: { PRICE_LOOKBACK_DAYS: PRICE_LOOKBACK_DAYS, BENCHMARK: BENCHMARK, TARGET_SNAPSHOTS: TARGET_SNAPSHOTS }
   };
-  if (typeof module !== 'undefined' && module.exports) module.exports = moduleApi;  // node/tests
-  global.ScreenerPerformance = moduleApi;                                           // browser global
+  if (typeof module !== 'undefined' && module.exports) module.exports = moduleApi;
+  global.ScreenerPerformance = moduleApi;
 
 })(typeof window !== 'undefined' ? window : globalThis);

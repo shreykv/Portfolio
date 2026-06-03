@@ -3526,5 +3526,38 @@ select#category-selector option:hover {
   .screener-perf__sum-delta.is-up   { color: var(--ok); }
   .screener-perf__sum-delta.is-down { color: var(--danger); }
 
+  /* ---- 2) Methodology disclosure (NEW) -------------------------------- */
+  .screener-perf__methodology {
+    margin-top: 16px;
+    font-size: 13px;
+    color: var(--muted);
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius2, 8px);
+    padding: 12px 14px;
+  }
+  .screener-perf__methodology summary {
+    cursor: pointer;
+    color: var(--text);
+    font-weight: 500;
+    list-style: none;
+  }
+  .screener-perf__methodology summary::-webkit-details-marker { display: none; }
+  .screener-perf__methodology summary::before {
+    content: "\25B8 ";   /* small right triangle */
+    color: var(--accent);
+    margin-right: 4px;
+    display: inline-block;
+    transition: transform 0.15s ease;
+  }
+  .screener-perf__methodology[open] summary::before {
+    transform: rotate(90deg);
+  }
+  .screener-perf__methodology p {
+    margin: 10px 0 0;
+    line-height: 1.5;
+  }
+  .screener-perf__methodology strong { color: var(--text); }
+ 
   .muted { color: var(--muted); }
   .section-title { font-size: 1.1rem; margin: 24px 0 12px; }
