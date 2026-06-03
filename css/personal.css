@@ -3558,6 +3558,190 @@ select#category-selector option:hover {
     line-height: 1.5;
   }
   .screener-perf__methodology strong { color: var(--text); }
- 
+ /* =============================================================================
+ * Screener — strategy sections, picks table, criteria badge.
+ *
+ * Append alongside the existing .screener-* rules in personal.css. Uses
+ * --st-color set inline on each .screener-strategy section to drive the
+ * left-border accent and the "full match" badge fill.
+ *
+ * Already-shipped classes used here unchanged:
+ *   .screener-shell / .screener-header / .screener-meta / .screener-loading
+ *   .screener-empty / .screener-error / .screener-placeholder
+ *   .screener-methodology / .screener-disclaimer
+ *   .screener-perf*  (performance module)
+ * ============================================================================= */
+
+  /* ---- Strategy section wrapper ----------------------------------------- */
+  .screener-strategy {
+    margin: 28px 0;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--st-color, var(--border));
+    border-radius: var(--radius, 12px);
+    overflow: hidden;        /* clip table scroll to rounded corners */
+  }
+  .screener-strategy__header {
+    padding: 18px 20px 12px;
+  }
+  .screener-strategy__name {
+    margin: 0 0 4px;
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .screener-strategy__subtitle {
+    margin: 0 0 12px;
+    font-size: 14px;
+  }
+  .screener-strategy__summary {
+    margin: 0 0 12px;
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--muted);
+    max-width: 78ch;
+  }
+  .screener-strategy__criteria {
+    margin: 0 0 10px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .screener-strategy__criteria summary {
+    cursor: pointer;
+    color: var(--text);
+    font-weight: 500;
+    list-style: none;
+    display: inline-block;
+    padding: 4px 0;
+  }
+  .screener-strategy__criteria summary::-webkit-details-marker { display: none; }
+  .screener-strategy__criteria summary::before {
+    content: "\25B8";
+    color: var(--st-color, var(--accent));
+    margin-right: 6px;
+    display: inline-block;
+    transition: transform 0.15s ease;
+  }
+  .screener-strategy__criteria[open] summary::before {
+    transform: rotate(90deg);
+  }
+  .screener-strategy__criteria ul {
+    margin: 8px 0 0;
+    padding-left: 22px;
+    line-height: 1.7;
+  }
+  .screener-strategy__criteria li { margin: 2px 0; }
+
+  .screener-strategy__count {
+    margin-top: 8px;
+    font-size: 11px;
+    color: var(--muted2);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 500;
+  }
+  .screener-strategy__empty {
+    margin: 0;
+    padding: 0 20px 22px;
+    color: var(--muted);
+    font-style: italic;
+  }
+
+  /* ---- Picks table ------------------------------------------------------ */
+  .screener-table-wrap {
+    overflow-x: auto;
+    border-top: 1px solid var(--border);
+    /* keep scrollbar subtle on dark theme */
+    scrollbar-color: var(--border) transparent;
+  }
+  .screener-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    color: var(--text);
+    min-width: 760px;       /* prevent squish; scroll on narrow screens */
+  }
+  .screener-table thead {
+    background: var(--panel2);
+  }
+  .screener-table th {
+    text-align: left;
+    font-weight: 600;
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  .screener-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+  }
+  .screener-table tbody tr:last-child td { border-bottom: none; }
+  .screener-table tbody tr:nth-child(even) {
+    background: rgba(255, 255, 255, 0.018);
+  }
+  .screener-table tbody tr:hover {
+    background: var(--panel2);
+  }
+
+  .screener-table__rank {
+    width: 36px;
+    color: var(--muted2);
+    font-variant-numeric: tabular-nums;
+  }
+  .screener-table__ticker {
+    font-weight: 600;
+    font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, monospace);
+    color: var(--text);
+    white-space: nowrap;
+  }
+  .screener-table__name {
+    color: var(--muted);
+    max-width: 240px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .screener-table__sector {
+    color: var(--muted);
+    white-space: nowrap;
+    font-size: 12px;
+  }
+  .screener-table__badge {
+    white-space: nowrap;
+  }
+  .screener-table__metric {
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    white-space: nowrap;
+  }
+  /* header right-alignment must also apply on the th */
+  .screener-table th.screener-table__metric { text-align: right; }
+
+  /* ---- Criteria-met badge (X/N pill) ----------------------------------- */
+  .screener-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+    background: var(--panel2);
+    color: var(--muted);
+    border: 1px solid var(--border);
+    min-width: 36px;
+    text-align: center;
+  }
+  .screener-badge--full {
+    background: var(--st-color, var(--accent));
+    color: #fff;
+    border-color: transparent;
+  }
+  
   .muted { color: var(--muted); }
   .section-title { font-size: 1.1rem; margin: 24px 0 12px; }
